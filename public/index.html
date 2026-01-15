@@ -7,8 +7,36 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Мой список задач</h1>
+  <!-- Форма входа/регистрации -->
+  <div id="authContainer" class="container">
+    <h1>To-Do List</h1>
+    
+    <div id="loginForm" class="auth-form">
+      <h2>Вход</h2>
+      <input type="text" id="loginUsername" placeholder="Логин" autocomplete="username">
+      <input type="password" id="loginPassword" placeholder="Пароль" autocomplete="current-password">
+      <button id="loginBtn">Войти</button>
+      <p class="auth-switch">Нет аккаунта? <a href="#" id="showRegister">Зарегистрироваться</a></p>
+    </div>
+
+    <div id="registerForm" class="auth-form" style="display: none;">
+      <h2>Регистрация</h2>
+      <input type="text" id="registerUsername" placeholder="Логин (мин. 3 символа)" autocomplete="username">
+      <input type="password" id="registerPassword" placeholder="Пароль (мин. 4 символа)" autocomplete="new-password">
+      <button id="registerBtn">Зарегистрироваться</button>
+      <p class="auth-switch">Уже есть аккаунт? <a href="#" id="showLogin">Войти</a></p>
+    </div>
+  </div>
+
+  <!-- Основное приложение -->
+  <div id="appContainer" class="container" style="display: none;">
+    <div class="header-section">
+      <h1>Мой список задач</h1>
+      <div class="user-info">
+        <span id="usernameDisplay"></span>
+        <button id="logoutBtn" class="logout-btn">Выйти</button>
+      </div>
+    </div>
     
     <div class="input-section">
       <input 
@@ -26,4 +54,3 @@
   <script src="app.js"></script>
 </body>
 </html>
-

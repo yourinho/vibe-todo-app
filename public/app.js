@@ -1,27 +1,190 @@
 const API_URL = '/api/todos';
+const AUTH_API = '/api';
 
-// Элементы DOM
+// Элементы DOM для авторизации
+const authContainer = document.getElementById('authContainer');
+const appContainer = document.getElementById('appContainer');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+const loginBtn = document.getElementById('loginBtn');
+const registerBtn = document.getElementById('registerBtn');
+const showRegister = document.getElementById('showRegister');
+const showLogin = document.getElementById('showLogin');
+const logoutBtn = document.getElementById('logoutBtn');
+const usernameDisplay = document.getElementById('usernameDisplay');
+
+// Элементы DOM для задач
 const todoInput = document.getElementById('todoInput');
 const addBtn = document.getElementById('addBtn');
 const todoList = document.getElementById('todoList');
 
-// Загрузка задач при загрузке страницы
-document.addEventListener('DOMContentLoaded', loadTodos);
-
-// Добавление задачи по клику на кнопку
-addBtn.addEventListener('click', addTodo);
-
-// Добавление задачи по Enter
-todoInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    addTodo();
-  }
+// Проверка авторизации при загрузке страницы
+document.addEventListener('DOMContentLoaded', async () => {
+  await checkAuth();
+  setupEventListeners();
 });
+
+// Настройка обработчиков событий
+function setupEventListeners() {
+  // Авторизация
+  loginBtn.addEventListener('click', handleLogin);
+  registerBtn.addEventListener('click', handleRegister);
+  showRegister.addEventListener('click', (e) => {
+    e.preventDefault();
+    showRegisterForm();
+  });
+  showLogin.addEventListener('click', (e) => {
+    e.preventDefault();
+    showLoginForm();
+  });
+  logoutBtn.addEventListener('click', handleLogout);
+
+  // Задачи
+  addBtn.addEventListener('click', addTodo);
+  todoInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      addTodo();
+    }
+  });
+}
+
+// Проверка авторизации
+async function checkAuth() {
+  try {
+    const response = await fetch(`${AUTH_API}/user`);
+    if (response.ok) {
+      const data = await response.json();
+      showApp(data.user);
+    } else {
+      showAuth();
+    }
+  } catch (error) {
+    console.error('Ошибка проверки авторизации:', error);
+    showAuth();
+  }
+}
+
+// Показать форму авторизации
+function showAuth() {
+  authContainer.style.display = 'block';
+  appContainer.style.display = 'none';
+  showLoginForm();
+}
+
+// Показать приложение
+function showApp(user) {
+  authContainer.style.display = 'none';
+  appContainer.style.display = 'block';
+  usernameDisplay.textContent = `Привет, ${user.username}!`;
+  loadTodos();
+}
+
+// Показать форму входа
+function showLoginForm() {
+  loginForm.style.display = 'block';
+  registerForm.style.display = 'none';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+// Показать форму регистрации
+function showRegisterForm() {
+  loginForm.style.display = 'none';
+  registerForm.style.display = 'block';
+  document.getElementById('registerUsername').value = '';
+  document.getElementById('registerPassword').value = '';
+}
+
+// Обработка входа
+async function handleLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+
+  if (!username || !password) {
+    alert('Введите логин и пароль');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${AUTH_API}/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      showApp(data.user);
+    } else {
+      alert('Ошибка: ' + data.error);
+    }
+  } catch (error) {
+    console.error('Ошибка входа:', error);
+    alert('Не удалось войти');
+  }
+}
+
+// Обработка регистрации
+async function handleRegister() {
+  const username = document.getElementById('registerUsername').value.trim();
+  const password = document.getElementById('registerPassword').value;
+
+  if (!username || !password) {
+    alert('Введите логин и пароль');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${AUTH_API}/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      showApp(data.user);
+    } else {
+      alert('Ошибка: ' + data.error);
+    }
+  } catch (error) {
+    console.error('Ошибка регистрации:', error);
+    alert('Не удалось зарегистрироваться');
+  }
+}
+
+// Обработка выхода
+async function handleLogout() {
+  try {
+    const response = await fetch(`${AUTH_API}/logout`, {
+      method: 'POST'
+    });
+
+    if (response.ok) {
+      showAuth();
+    } else {
+      alert('Ошибка при выходе');
+    }
+  } catch (error) {
+    console.error('Ошибка выхода:', error);
+    alert('Не удалось выйти');
+  }
+}
 
 // Загрузка всех задач
 async function loadTodos() {
   try {
     const response = await fetch(API_URL);
+    if (response.status === 401) {
+      showAuth();
+      return;
+    }
     const todos = await response.json();
     renderTodos(todos);
   } catch (error) {
@@ -81,6 +244,11 @@ async function addTodo() {
       body: JSON.stringify({ text })
     });
 
+    if (response.status === 401) {
+      showAuth();
+      return;
+    }
+
     if (response.ok) {
       todoInput.value = '';
       loadTodos();
@@ -105,6 +273,11 @@ async function toggleTodo(id, completed) {
       body: JSON.stringify({ completed })
     });
 
+    if (response.status === 401) {
+      showAuth();
+      return;
+    }
+
     if (response.ok) {
       loadTodos();
     } else {
@@ -128,6 +301,11 @@ async function deleteTodo(id) {
       method: 'DELETE'
     });
 
+    if (response.status === 401) {
+      showAuth();
+      return;
+    }
+
     if (response.ok) {
       loadTodos();
     } else {
@@ -139,4 +317,3 @@ async function deleteTodo(id) {
     alert('Не удалось удалить задачу');
   }
 }
-
