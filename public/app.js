@@ -70,6 +70,7 @@ function setupEventListeners() {
     });
   }
 
+
   // Модальное окно лога
   if (logModalOverlay && logModalClose) {
     logModalClose.addEventListener('click', hideLogModal);
@@ -421,6 +422,10 @@ function renderTodos(todos) {
     const text = document.createElement('span');
     text.className = 'todo-text';
     text.textContent = todo.text;
+    text.style.cursor = 'pointer';
+    text.addEventListener('click', () => {
+      window.location.href = `/todo.html?id=${todo.id}`;
+    });
 
     // Блок таймера
     const timerContainer = document.createElement('div');

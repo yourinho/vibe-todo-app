@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Задача</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="todoPageContainer" class="container">
+    <div class="header-section" style="justify-content: flex-start;">
+      <button id="backToList" class="link-btn">← К списку</button>
+    </div>
+
+    <div class="input-section">
+      <input 
+        type="text" 
+        id="todoTitleInput" 
+        placeholder="Название задачи" 
+        autocomplete="off"
+        class="todo-title-input"
+      >
+    </div>
+
+    <div class="description-section">
+      <div class="description-container">
+        <div class="description-toolbar">
+          <button type="button" class="toolbar-btn" data-cmd="bold"><b>B</b></button>
+          <button type="button" class="toolbar-btn" data-cmd="italic"><i>I</i></button>
+          <button type="button" class="toolbar-btn" data-cmd="underline"><u>U</u></button>
+          <button type="button" class="toolbar-btn" data-cmd="strikeThrough"><s>S</s></button>
+          <button type="button" class="toolbar-btn" data-cmd="insertUnorderedList">• Список</button>
+          <button type="button" class="toolbar-btn" data-cmd="formatBlock" data-value="h3">H3</button>
+          <button type="button" class="toolbar-btn" data-cmd="createLink">Ссылка</button>
+        </div>
+        <div 
+          id="todoDescriptionEditor" 
+          class="description-editor" 
+          contenteditable="true"
+          placeholder="Описание задачи. Поддерживаются заголовки, жирный, курсив, списки, ссылки..."
+        ></div>
+      </div>
+    </div>
+
+    <div class="input-section" style="justify-content: flex-end;">
+      <button id="saveTodoBtn" class="primary-btn">Сохранить</button>
+    </div>
+
+    <p id="todoStatus" style="font-size: 13px; color: #777;"></p>
+  </div>
+
+  <div id="snackbar" class="snackbar"></div>
+
+  <script src="todo.js"></script>
+</body>
+</html>
+

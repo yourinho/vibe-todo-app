@@ -43,6 +43,7 @@ const db = new sqlite3.Database('./todos.db', (err) => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       text TEXT NOT NULL,
+      description TEXT,
       completed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       total_time_seconds INTEGER DEFAULT 0,
@@ -62,6 +63,15 @@ const db = new sqlite3.Database('./todos.db', (err) => {
     )`);
 
     // Простейшая миграция для уже существующей таблицы todos
+    db.run(
+      'ALTER TABLE todos ADD COLUMN description TEXT',
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции description:', err.message);
+        }
+      }
+    );
+
     db.run(
       'ALTER TABLE todos ADD COLUMN total_time_seconds INTEGER DEFAULT 0',
       (err) => {
@@ -215,6 +225,27 @@ app.get('/api/user', (req, res) => {
 
 // API Routes для задач (требуют авторизации)
 
+// Получить одну задачу по id
+app.get('/api/todos/:id', requireAuth, (req, res) => {
+  const { id } = req.params;
+
+  db.get(
+    'SELECT * FROM todos WHERE id = ? AND user_id = ?',
+    [id, req.session.userId],
+    (err, todo) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (!todo) {
+        res.status(404).json({ error: 'Задача не найдена' });
+        return;
+      }
+      res.json(todo);
+    }
+  );
+});
+
 // Получить все задачи текущего пользователя
 app.get('/api/todos', requireAuth, (req, res) => {
   db.all(
@@ -232,21 +263,21 @@ app.get('/api/todos', requireAuth, (req, res) => {
 
 // Создать новую задачу
 app.post('/api/todos', requireAuth, (req, res) => {
-  const { text } = req.body;
+  const { text, description } = req.body;
   if (!text || text.trim() === '') {
     res.status(400).json({ error: 'Текст задачи обязателен' });
     return;
   }
 
   db.run(
-    'INSERT INTO todos (user_id, text) VALUES (?, ?)',
-    [req.session.userId, text.trim()],
+    'INSERT INTO todos (user_id, text, description) VALUES (?, ?, ?)',
+    [req.session.userId, text.trim(), description || null],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.json({ id: this.lastID, text: text.trim(), completed: 0 });
+      res.json({ id: this.lastID, text: text.trim(), description: description || null, completed: 0 });
     }
   );
 });
@@ -254,7 +285,7 @@ app.post('/api/todos', requireAuth, (req, res) => {
 // Обновить задачу
 app.put('/api/todos/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const { text, completed } = req.body;
+  const { text, description, completed } = req.body;
 
   // Проверяем, что задача принадлежит текущему пользователю
   db.get(
@@ -278,6 +309,11 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
       if (text !== undefined) {
         updates.push('text = ?');
         params.push(text.trim());
+      }
+
+      if (description !== undefined) {
+        updates.push('description = ?');
+        params.push(description || null);
       }
 
       if (completed !== undefined) {
