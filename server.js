@@ -45,8 +45,40 @@ const db = new sqlite3.Database('./todos.db', (err) => {
       text TEXT NOT NULL,
       completed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      total_time_seconds INTEGER DEFAULT 0,
+      timer_started_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`);
+
+    // Таблица логов событий таймера по задачам
+    db.run(`CREATE TABLE IF NOT EXISTS todo_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      todo_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL, -- 'start' | 'pause'
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (todo_id) REFERENCES todos(id)
+    )`);
+
+    // Простейшая миграция для уже существующей таблицы todos
+    db.run(
+      'ALTER TABLE todos ADD COLUMN total_time_seconds INTEGER DEFAULT 0',
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции total_time_seconds:', err.message);
+        }
+      }
+    );
+
+    db.run(
+      'ALTER TABLE todos ADD COLUMN timer_started_at DATETIME',
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции timer_started_at:', err.message);
+        }
+      }
+    );
   }
 });
 
@@ -241,18 +273,46 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
 
       let query = 'UPDATE todos SET ';
       let params = [];
+      const updates = [];
 
       if (text !== undefined) {
-        query += 'text = ?';
+        updates.push('text = ?');
         params.push(text.trim());
       }
 
       if (completed !== undefined) {
-        if (params.length > 0) query += ', ';
-        query += 'completed = ?';
-        params.push(completed ? 1 : 0);
+        // Если задача переключается в состояние "выполнена",
+        // и таймер был запущен, нужно добавить прошедшее время
+        if (completed && todo.timer_started_at) {
+          const startedAt = new Date(todo.timer_started_at);
+          const now = new Date();
+          const diffSeconds = Math.max(
+            0,
+            Math.floor((now.getTime() - startedAt.getTime()) / 1000)
+          );
+
+          const newTotal =
+            (todo.total_time_seconds || 0) + diffSeconds;
+
+          updates.push('completed = ?');
+          params.push(1);
+
+          updates.push('total_time_seconds = ?');
+          params.push(newTotal);
+
+          updates.push('timer_started_at = NULL');
+        } else {
+          updates.push('completed = ?');
+          params.push(completed ? 1 : 0);
+        }
       }
 
+      if (updates.length === 0) {
+        res.json({ message: 'Нет изменений' });
+        return;
+      }
+
+      query += updates.join(', ');
       query += ' WHERE id = ? AND user_id = ?';
       params.push(id, req.session.userId);
 
@@ -263,6 +323,153 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
         }
         res.json({ message: 'Задача обновлена' });
       });
+    }
+  );
+});
+
+// Запуск таймера для задачи
+app.post('/api/todos/:id/start-timer', requireAuth, (req, res) => {
+  const { id } = req.params;
+
+  db.get(
+    'SELECT * FROM todos WHERE id = ? AND user_id = ?',
+    [id, req.session.userId],
+    (err, todo) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!todo) {
+        res.status(404).json({ error: 'Задача не найдена' });
+        return;
+      }
+
+      // Если таймер уже запущен для этой задачи, просто возвращаем текущие данные
+      if (todo.timer_started_at) {
+        res.json({ message: 'Таймер уже запущен' });
+        return;
+      }
+
+      // Проверяем, нет ли другой активной задачи с таймером у этого пользователя
+      db.get(
+        'SELECT id FROM todos WHERE user_id = ? AND timer_started_at IS NOT NULL AND id != ? LIMIT 1',
+        [req.session.userId, id],
+        (activeErr, activeTodo) => {
+          if (activeErr) {
+            res.status(500).json({ error: activeErr.message });
+            return;
+          }
+
+          if (activeTodo) {
+            res.status(400).json({
+              error:
+                'У вас уже есть другая задача с запущенным таймером. Сначала поставьте её на паузу.'
+            });
+            return;
+          }
+
+          const nowIso = new Date().toISOString();
+
+          db.run(
+            'UPDATE todos SET timer_started_at = ? WHERE id = ? AND user_id = ?',
+            [nowIso, id, req.session.userId],
+            function(updateErr) {
+              if (updateErr) {
+                res.status(500).json({ error: updateErr.message });
+                return;
+              }
+
+              // Логируем запуск таймера
+              db.run(
+                'INSERT INTO todo_logs (user_id, todo_id, event_type) VALUES (?, ?, ?)',
+                [req.session.userId, id, 'start'],
+                (logErr) => {
+                  if (logErr) {
+                    console.error('Ошибка записи лога (start):', logErr.message);
+                  }
+                  res.json({ message: 'Таймер запущен' });
+                }
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Пауза таймера для задачи
+app.post('/api/todos/:id/pause-timer', requireAuth, (req, res) => {
+  const { id } = req.params;
+
+  db.get(
+    'SELECT * FROM todos WHERE id = ? AND user_id = ?',
+    [id, req.session.userId],
+    (err, todo) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!todo) {
+        res.status(404).json({ error: 'Задача не найдена' });
+        return;
+      }
+
+      if (!todo.timer_started_at) {
+        res.status(400).json({ error: 'Таймер не запущен' });
+        return;
+      }
+
+      const startedAt = new Date(todo.timer_started_at);
+      const now = new Date();
+      const diffSeconds = Math.max(
+        0,
+        Math.floor((now.getTime() - startedAt.getTime()) / 1000)
+      );
+
+      const newTotal = (todo.total_time_seconds || 0) + diffSeconds;
+
+      db.run(
+        'UPDATE todos SET total_time_seconds = ?, timer_started_at = NULL WHERE id = ? AND user_id = ?',
+        [newTotal, id, req.session.userId],
+        function(updateErr) {
+          if (updateErr) {
+            res.status(500).json({ error: updateErr.message });
+            return;
+          }
+
+          // Логируем паузу таймера
+          db.run(
+            'INSERT INTO todo_logs (user_id, todo_id, event_type) VALUES (?, ?, ?)',
+            [req.session.userId, id, 'pause'],
+            (logErr) => {
+              if (logErr) {
+                console.error('Ошибка записи лога (pause):', logErr.message);
+              }
+              res.json({ message: 'Таймер поставлен на паузу' });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Лог событий по задаче
+app.get('/api/todos/:id/logs', requireAuth, (req, res) => {
+  const { id } = req.params;
+
+  db.all(
+    'SELECT event_type, created_at FROM todo_logs WHERE user_id = ? AND todo_id = ? ORDER BY created_at DESC',
+    [req.session.userId, id],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows);
     }
   );
 });

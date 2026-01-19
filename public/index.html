@@ -51,6 +51,33 @@
     <ul id="todoList"></ul>
   </div>
 
+  <!-- Модальное окно подтверждения переключения задачи -->
+  <div id="modalOverlay" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h2 class="modal-title">Переключить задачу?</h2>
+      <p class="modal-text" id="modalText">
+        У вас уже запущен таймер по другой задаче. Поставить её на паузу и начать новую?
+      </p>
+      <div class="modal-actions">
+        <button id="modalConfirm" class="modal-btn primary">Да, переключиться</button>
+        <button id="modalCancel" class="modal-btn">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно лога задачи -->
+  <div id="logModalOverlay" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h2 class="modal-title" id="logModalTitle">Лог задачи</h2>
+      <div class="modal-text">
+        <ul id="logList" class="log-list"></ul>
+      </div>
+      <div class="modal-actions">
+        <button id="logModalClose" class="modal-btn primary">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
