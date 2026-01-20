@@ -56,11 +56,30 @@ const db = new sqlite3.Database('./todos.db', (err) => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       todo_id INTEGER NOT NULL,
-      event_type TEXT NOT NULL, -- 'start' | 'pause' | 'manual_add' | 'manual_subtract' | 'manual_set'
+      event_type TEXT NOT NULL, -- 'create' | 'complete' | 'start' | 'pause' | 'manual_add' | 'manual_subtract' | 'manual_set'
       seconds_change INTEGER, -- изменение времени в секундах (для ручных операций)
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (todo_id) REFERENCES todos(id)
+    )`);
+
+    // Таблица тегов (у каждого пользователя свои теги)
+    db.run(`CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`);
+
+    // Связь задач и тегов (многие-ко-многим)
+    db.run(`CREATE TABLE IF NOT EXISTS todo_tags (
+      todo_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      PRIMARY KEY (todo_id, tag_id),
+      FOREIGN KEY (todo_id) REFERENCES todos(id),
+      FOREIGN KEY (tag_id) REFERENCES tags(id)
     )`);
 
     // Миграция для добавления поля seconds_change
@@ -234,6 +253,99 @@ app.get('/api/user', (req, res) => {
   }
 });
 
+// API Routes для тегов
+app.get('/api/tags', requireAuth, (req, res) => {
+  db.all(
+    'SELECT id, name, color FROM tags WHERE user_id = ? ORDER BY name',
+    [req.session.userId],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+app.post('/api/tags', requireAuth, (req, res) => {
+  const { name, color } = req.body;
+  if (!name || !name.trim()) {
+    res.status(400).json({ error: 'Название тега обязательно' });
+    return;
+  }
+  const c = (color || '#667eea').toString().trim();
+  if (!/^#[0-9A-Fa-f]{6}$/.test(c)) {
+    res.status(400).json({ error: 'Некорректный цвет (ожидается #RRGGBB)' });
+    return;
+  }
+  db.run(
+    'INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)',
+    [req.session.userId, name.trim(), c],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.status(201).json({ id: this.lastID, name: name.trim(), color: c });
+    }
+  );
+});
+
+app.put('/api/tags/:id', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { name, color } = req.body;
+  if (!name || !name.trim()) {
+    res.status(400).json({ error: 'Название тега обязательно' });
+    return;
+  }
+  const c = color != null ? color.toString().trim() : null;
+  if (c !== null && !/^#[0-9A-Fa-f]{6}$/.test(c)) {
+    res.status(400).json({ error: 'Некорректный цвет (ожидается #RRGGBB)' });
+    return;
+  }
+  let q = 'UPDATE tags SET name = ?';
+  const params = [name.trim()];
+  if (c !== null) {
+    q += ', color = ?';
+    params.push(c);
+  }
+  q += ' WHERE id = ? AND user_id = ?';
+  params.push(id, req.session.userId);
+  db.run(q, params, function(err) {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (this.changes === 0) {
+      res.status(404).json({ error: 'Тег не найден' });
+      return;
+    }
+    res.json({ message: 'Тег обновлён' });
+  });
+});
+
+app.delete('/api/tags/:id', requireAuth, (req, res) => {
+  const { id } = req.params;
+  db.run('DELETE FROM todo_tags WHERE tag_id = ?', [id], (err1) => {
+    if (err1) {
+      res.status(500).json({ error: err1.message });
+      return;
+    }
+    db.run('DELETE FROM tags WHERE id = ? AND user_id = ?', [id, req.session.userId], function(err2) {
+      if (err2) {
+        res.status(500).json({ error: err2.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Тег не найден' });
+        return;
+      }
+      res.json({ message: 'Тег удалён' });
+    });
+  });
+});
+
 // API Routes для задач (требуют авторизации)
 
 // Специфичные маршруты должны быть ПЕРЕД общими маршрутами /api/todos/:id
@@ -325,6 +437,69 @@ app.post('/api/todos/:id/update-time', requireAuth, (req, res) => {
   );
 });
 
+// Добавить тег к задаче
+app.post('/api/todos/:id/tags', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { tag_id } = req.body;
+  if (!tag_id) {
+    res.status(400).json({ error: 'Укажите tag_id' });
+    return;
+  }
+  db.get('SELECT * FROM todos WHERE id = ? AND user_id = ?', [id, req.session.userId], (err, todo) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!todo) {
+      res.status(404).json({ error: 'Задача не найдена' });
+      return;
+    }
+    db.get('SELECT * FROM tags WHERE id = ? AND user_id = ?', [tag_id, req.session.userId], (e, tag) => {
+      if (e) {
+        res.status(500).json({ error: e.message });
+        return;
+      }
+      if (!tag) {
+        res.status(404).json({ error: 'Тег не найден' });
+        return;
+      }
+      db.run('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)', [id, tag_id], function(insErr) {
+        if (insErr) {
+          res.status(500).json({ error: insErr.message });
+          return;
+        }
+        if (this.changes === 0) {
+          res.json({ message: 'Тег уже добавлен', tag: { id: tag.id, name: tag.name, color: tag.color } });
+          return;
+        }
+        res.status(201).json({ tag: { id: tag.id, name: tag.name, color: tag.color } });
+      });
+    });
+  });
+});
+
+// Удалить тег у задачи
+app.delete('/api/todos/:id/tags/:tagId', requireAuth, (req, res) => {
+  const { id, tagId } = req.params;
+  db.get('SELECT * FROM todos WHERE id = ? AND user_id = ?', [id, req.session.userId], (err, todo) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    if (!todo) {
+      res.status(404).json({ error: 'Задача не найдена' });
+      return;
+    }
+    db.run('DELETE FROM todo_tags WHERE todo_id = ? AND tag_id = ?', [id, tagId], function(delErr) {
+      if (delErr) {
+        res.status(500).json({ error: delErr.message });
+        return;
+      }
+      res.json({ message: 'Тег удалён' });
+    });
+  });
+});
+
 // Получить одну задачу по id
 app.get('/api/todos/:id', requireAuth, (req, res) => {
   const { id } = req.params;
@@ -332,21 +507,38 @@ app.get('/api/todos/:id', requireAuth, (req, res) => {
   db.get(
     'SELECT * FROM todos WHERE id = ? AND user_id = ?',
     [id, req.session.userId],
-    (err, todo) => {
+    (err, row) => {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
-      if (!todo) {
+      if (!row) {
         res.status(404).json({ error: 'Задача не найдена' });
         return;
       }
-      res.json(todo);
+      db.all(
+        'SELECT t.id, t.name, t.color FROM tags t JOIN todo_tags tt ON t.id = tt.tag_id WHERE tt.todo_id = ?',
+        [row.id],
+        (e, tagRows) => {
+          const tags = (e || !tagRows) ? [] : tagRows;
+          res.json({
+            id: row.id,
+            user_id: row.user_id,
+            text: row.text != null ? String(row.text) : '',
+            description: row.description != null ? String(row.description) : null,
+            completed: row.completed,
+            created_at: row.created_at,
+            total_time_seconds: row.total_time_seconds != null ? row.total_time_seconds : 0,
+            timer_started_at: row.timer_started_at,
+            tags
+          });
+        }
+      );
     }
   );
 });
 
-// Получить все задачи текущего пользователя
+// Получить все задачи текущего пользователя (с тегами)
 app.get('/api/todos', requireAuth, (req, res) => {
   db.all(
     'SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC',
@@ -356,7 +548,31 @@ app.get('/api/todos', requireAuth, (req, res) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.json(rows);
+      if (!rows || rows.length === 0) {
+        res.json([]);
+        return;
+      }
+      const ids = rows.map((r) => r.id);
+      const placeholders = ids.map(() => '?').join(',');
+      db.all(
+        `SELECT tt.todo_id, t.id AS tag_id, t.name AS tag_name, t.color AS tag_color
+         FROM todo_tags tt JOIN tags t ON t.id = tt.tag_id
+         WHERE tt.todo_id IN (${placeholders})`,
+        ids,
+        (e, tagRows) => {
+          if (e) {
+            res.status(500).json({ error: e.message });
+            return;
+          }
+          const byTodo = {};
+          (tagRows || []).forEach((tr) => {
+            if (!byTodo[tr.todo_id]) byTodo[tr.todo_id] = [];
+            byTodo[tr.todo_id].push({ id: tr.tag_id, name: tr.tag_name, color: tr.tag_color });
+          });
+          rows.forEach((r) => { r.tags = byTodo[r.id] || []; });
+          res.json(rows);
+        }
+      );
     }
   );
 });
@@ -377,7 +593,15 @@ app.post('/api/todos', requireAuth, (req, res) => {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.json({ id: this.lastID, text: text.trim(), description: description || null, completed: 0 });
+      const newId = this.lastID;
+      db.run(
+        'INSERT INTO todo_logs (user_id, todo_id, event_type) VALUES (?, ?, ?)',
+        [req.session.userId, newId, 'create'],
+        (logErr) => {
+          if (logErr) console.error('Ошибка записи лога (create):', logErr.message);
+        }
+      );
+      res.json({ id: newId, text: text.trim(), description: description || null, completed: 0 });
     }
   );
 });
@@ -452,12 +676,25 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
       query += ' WHERE id = ? AND user_id = ?';
       params.push(id, req.session.userId);
 
+      const loggingComplete = completed === true || completed === 1;
+
       db.run(query, params, function(err) {
         if (err) {
           res.status(500).json({ error: err.message });
           return;
         }
-        res.json({ message: 'Задача обновлена' });
+        if (loggingComplete) {
+          db.run(
+            'INSERT INTO todo_logs (user_id, todo_id, event_type) VALUES (?, ?, ?)',
+            [req.session.userId, id, 'complete'],
+            (logErr) => {
+              if (logErr) console.error('Ошибка записи лога (complete):', logErr.message);
+              res.json({ message: 'Задача обновлена' });
+            }
+          );
+        } else {
+          res.json({ message: 'Задача обновлена' });
+        }
       });
     }
   );
@@ -613,23 +850,27 @@ app.get('/api/todos/:id/logs', requireAuth, (req, res) => {
 // Удалить задачу
 app.delete('/api/todos/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  
-  // Проверяем, что задача принадлежит текущему пользователю
-  db.run(
-    'DELETE FROM todos WHERE id = ? AND user_id = ?',
-    [id, req.session.userId],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      if (this.changes === 0) {
-        res.status(404).json({ error: 'Задача не найдена' });
-        return;
-      }
-      res.json({ message: 'Задача удалена' });
+  db.run('DELETE FROM todo_tags WHERE todo_id = ?', [id], (err1) => {
+    if (err1) {
+      res.status(500).json({ error: err1.message });
+      return;
     }
-  );
+    db.run(
+      'DELETE FROM todos WHERE id = ? AND user_id = ?',
+      [id, req.session.userId],
+      function(err) {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        if (this.changes === 0) {
+          res.status(404).json({ error: 'Задача не найдена' });
+          return;
+        }
+        res.json({ message: 'Задача удалена' });
+      }
+    );
+  });
 });
 
 // Запуск сервера

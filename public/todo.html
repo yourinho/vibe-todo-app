@@ -45,6 +45,25 @@
       </div>
     </div>
 
+    <div class="tags-section">
+      <div class="tags-section-header">
+        <span class="tags-label">Теги:</span>
+        <div class="tags-actions">
+          <div id="tagsList" class="tags-list"></div>
+          <button type="button" id="addTagBtn" class="add-tag-btn" title="Добавить тег">+ Тег</button>
+        </div>
+      </div>
+      <div id="tagPicker" class="tag-picker" style="display: none;">
+        <div id="tagPickerList" class="tag-picker-list"></div>
+        <div class="tag-picker-divider"></div>
+        <div class="tag-picker-create">
+          <input type="text" id="newTagName" placeholder="Название тега" class="tag-name-input">
+          <div id="tagColorPalette" class="tag-color-palette"></div>
+          <button type="button" id="createTagBtn" class="create-tag-btn">Создать и добавить</button>
+        </div>
+      </div>
+    </div>
+
     <div class="time-edit-section">
       <div class="time-edit-header">
         <span class="time-edit-label">Время работы:</span>

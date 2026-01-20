@@ -350,6 +350,10 @@ function formatSecondsForLog(totalSeconds) {
 
 function formatLogEvent(eventType, secondsChange) {
   switch (eventType) {
+    case 'create':
+      return 'Создание задачи';
+    case 'complete':
+      return 'Задача выполнена';
     case 'start':
       return 'Старт таймера';
     case 'pause':
@@ -442,12 +446,14 @@ function renderTodos(todos) {
     checkbox.checked = todo.completed === 1;
     checkbox.addEventListener('change', () => toggleTodo(todo.id, checkbox.checked));
     
-    const text = document.createElement('span');
+    const text = document.createElement('a');
     text.className = 'todo-text';
+    text.href = `todo.html?id=${todo.id}`;
     text.textContent = todo.text;
-    text.style.cursor = 'pointer';
-    text.addEventListener('click', () => {
-      window.location.href = `/todo.html?id=${todo.id}`;
+
+    li.addEventListener('click', (e) => {
+      if (e.target.closest('button, input, a')) return;
+      window.location.href = `todo.html?id=${todo.id}`;
     });
 
     // Блок таймера
@@ -513,17 +519,31 @@ function renderTodos(todos) {
     logBtn.className = 'log-btn';
     logBtn.textContent = 'Лог';
     logBtn.addEventListener('click', () => openTodoLog(todo.id, todo.text));
-    
+
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'delete-btn';
     deleteBtn.textContent = 'Удалить';
     deleteBtn.addEventListener('click', () => deleteTodo(todo.id));
-    
+
     li.appendChild(checkbox);
     li.appendChild(text);
     li.appendChild(timerContainer);
     li.appendChild(logBtn);
     li.appendChild(deleteBtn);
+
+    if (todo.tags && todo.tags.length > 0) {
+      const tagsRow = document.createElement('div');
+      tagsRow.className = 'todo-tags-row';
+      todo.tags.forEach((tag) => {
+        const t = document.createElement('span');
+        t.className = 'todo-list-tag';
+        t.style.backgroundColor = tag.color;
+        t.textContent = tag.name;
+        tagsRow.appendChild(t);
+      });
+      li.appendChild(tagsRow);
+    }
+
     todoList.appendChild(li);
   });
 }

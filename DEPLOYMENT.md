@@ -553,4 +553,213 @@ http://your_domain
 **Более продвинутое решение (опционально):**
 Можно настроить автозапуск через `systemd` или `pm2`, чтобы приложение запускалось автоматически при перезагрузке сервера. Но для первого опыта с деплоем достаточно и ручного запуска через `nohup`.
 
+---
+
+## 12. Настройка HTTPS (SSL-сертификат)
+
+Чтобы сайт открывался по `https://` (замочек в браузере), нужен SSL-сертификат.  
+Самый простой способ — **Let's Encrypt** (бесплатно, через `certbot`).
+
+### ⚠️ Важно: нужен домен
+
+Let's Encrypt **не выдаёт сертификаты на голый IP**. Нужен домен, например:
+
+- `todo.example.com`
+- `mytodo.ru`
+
+Домен должен **указывать на IP твоего VDS** (A-запись в DNS).  
+Проверь: `ping your_domain` — в ответ должен быть IP твоего сервера.
+
+---
+
+### 12.1. Подключись к серверу
+
+```bash
+ssh user@VDS_IP
+```
+
+---
+
+### 12.2. Установи Certbot
+
+Для **Ubuntu 22.04 / Debian 11+**:
+
+```bash
+sudo apt update
+sudo apt install -y certbot python3-certbot-nginx
+```
+
+- `certbot` — утилита для получения сертификатов.
+- `python3-certbot-nginx` — плагин для автоматической настройки nginx.
+
+---
+
+### 12.3. Убедись, что в nginx указан домен
+
+Открой конфиг:
+
+```bash
+sudo nano /etc/nginx/sites-available/vibe-todo
+```
+
+В `server_name` должен быть **твой домен**, а не IP:
+
+```nginx
+server_name your_domain.com;
+```
+
+Например: `server_name todo.example.com;`  
+Если там был IP — замени на домен, сохрани (`Ctrl+O`, `Ctrl+X`) и перезагрузи nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+---
+
+### 12.4. Получи сертификат и настрой HTTPS
+
+Запусти certbot (подставь свой домен):
+
+```bash
+sudo certbot --nginx -d your_domain.com
+```
+
+Пример: `sudo certbot --nginx -d todo.example.com`
+
+Certbot спросит:
+
+1. **Email** — укажи свой (для уведомлений об истечении сертификата).
+2. **Согласие с условиями** — Yes.
+3. **Рассылка от EFF** — по желанию (No/Yes).
+
+Certbot сам:
+
+- получит сертификат от Let's Encrypt;
+- добавит в nginx `listen 443 ssl` и пути к сертификатам;
+- при желании настроит редирект с HTTP на HTTPS (рекомендуется — выбери **2. Redirect**).
+
+---
+
+### 12.5. Проверь конфиг nginx
+
+После certbot конфиг будет примерно таким:
+
+```bash
+sudo nano /etc/nginx/sites-available/vibe-todo
+```
+
+Пример того, что добавляет certbot:
+
+```nginx
+server {
+    server_name your_domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/your_domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your_domain.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = your_domain.com) {
+        return 301 https://$host$request_uri;
+    }
+    listen 80;
+    server_name your_domain.com;
+    return 404;
+}
+```
+
+Строки `proxy_set_header X-Forwarded-Proto $scheme;` помогают приложению понимать, что запрос пришёл по HTTPS (если понадобится в коде).
+
+Проверка и перезагрузка:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+---
+
+### 12.6. Открой сайт по HTTPS
+
+В браузере: **https://your_domain.com**  
+Должен открыться сайт с замочком (валидный SSL).
+
+---
+
+### 12.7. Автопродление сертификата
+
+Сертификаты Let's Encrypt действуют **90 дней**. Certbot настраивает задачу в cron/systemd, которая их обновляет.
+
+Проверить, что таймер есть:
+
+```bash
+sudo systemctl status certbot.timer
+```
+
+Или:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+Если команда проходит без ошибок — продление настроено. Вручную ничего делать не нужно.
+
+---
+
+### 12.8. Если используешь только IP (без домена)
+
+Для одного только IP **нормальный SSL от Let's Encrypt недоступен**. Варианты:
+
+- **Купить или взять бесплатный домен** и привязать его к IP (рекомендуется).
+- **Самоподписанный сертификат** — браузер будет показывать предупреждение «Небезопасно», подходит только для тестов.
+
+Для самоподписанного (на свой страх и риск, только для проверки):
+
+```bash
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/selfsigned.key \
+  -out /etc/ssl/certs/selfsigned.crt \
+  -subj "/CN=your_server_ip"
+```
+
+Дальше в nginx вручную прописать `ssl_certificate` и `ssl_certificate_key` на эти файлы. Браузер всё равно будет считать соединение недоверенным.
+
+---
+
+### 12.9. Сессия (cookie) после перехода на HTTPS
+
+В `server.js` в настройках сессии:
+
+```javascript
+cookie: { 
+  secure: false,  // для HTTP
+  maxAge: 24 * 60 * 60 * 1000
+}
+```
+
+Когда сайт работает **только по HTTPS**, поменяй на:
+
+```javascript
+cookie: { 
+  secure: true,   // куки только по HTTPS
+  maxAge: 24 * 60 * 60 * 1000
+}
+```
+
+И перезапусти приложение (раздел 8).  
+Если оставить `secure: false` при HTTPS — в большинстве браузеров куки всё равно будут работать, но с `secure: true` — правильнее с точки зрения безопасности.
+
 
