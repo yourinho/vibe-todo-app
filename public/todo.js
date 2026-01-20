@@ -10,11 +10,18 @@ const snackbarEl = document.getElementById('snackbar');
 const confirmExitModal = document.getElementById('confirmExitModal');
 const confirmExitBtn = document.getElementById('confirmExitBtn');
 const cancelExitBtn = document.getElementById('cancelExitBtn');
+const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+const timeInput = document.getElementById('timeInput');
+const setTimeInput = document.getElementById('setTimeInput');
+const addTimeBtn = document.getElementById('addTimeBtn');
+const subtractTimeBtn = document.getElementById('subtractTimeBtn');
+const setTimeBtn = document.getElementById('setTimeBtn');
 
 let currentTodoId = null;
 let savedText = '';
 let savedDescription = '';
 let hasUnsavedChanges = false;
+let currentTotalTimeSeconds = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
   init();
@@ -78,6 +85,7 @@ async function init() {
   setupToolbar();
   setupResizeHandle();
   setupLinkDetection();
+  setupTimeEditing();
 
   await ensureAuth();
   await loadTodo();
@@ -152,8 +160,10 @@ async function loadTodo() {
     // Сохраняем начальное состояние
     savedText = todo.text || '';
     savedDescription = todo.description || '';
+    currentTotalTimeSeconds = todo.total_time_seconds || 0;
     hasUnsavedChanges = false;
     
+    updateTimeDisplay();
     updateStatusAndSaveButton();
   } catch (e) {
     console.error('Ошибка загрузки задачи:', e);
@@ -398,6 +408,157 @@ function showConfirmExitModal() {
 function hideConfirmExitModal() {
   if (confirmExitModal) {
     confirmExitModal.style.display = 'none';
+  }
+}
+
+function setupTimeEditing() {
+  if (addTimeBtn) {
+    addTimeBtn.addEventListener('click', () => updateTime('add'));
+  }
+  if (subtractTimeBtn) {
+    subtractTimeBtn.addEventListener('click', () => updateTime('subtract'));
+  }
+  if (setTimeBtn) {
+    setTimeBtn.addEventListener('click', () => updateTime('set'));
+  }
+  if (timeInput) {
+    timeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        if (e.shiftKey) {
+          updateTime('subtract');
+        } else {
+          updateTime('add');
+        }
+      }
+    });
+  }
+  if (setTimeInput) {
+    setTimeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        updateTime('set');
+      }
+    });
+  }
+}
+
+function parseTimeToSeconds(timeStr) {
+  if (!timeStr || !timeStr.match(/^\d{1,2}:[0-5]\d:[0-5]\d$/)) {
+    return null;
+  }
+  const parts = timeStr.split(':').map(Number);
+  return parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function formatSeconds(totalSeconds) {
+  const sec = Math.max(0, Math.floor(totalSeconds || 0));
+  const hours = Math.floor(sec / 3600);
+  const minutes = Math.floor((sec % 3600) / 60);
+  const seconds = sec % 60;
+
+  const hStr = hours.toString().padStart(2, '0');
+  const mStr = minutes.toString().padStart(2, '0');
+  const sStr = seconds.toString().padStart(2, '0');
+
+  return `${hStr}:${mStr}:${sStr}`;
+}
+
+function updateTimeDisplay() {
+  if (currentTimeDisplay) {
+    currentTimeDisplay.textContent = formatSeconds(currentTotalTimeSeconds);
+  }
+}
+
+async function updateTime(operation) {
+  let inputElement = null;
+  let seconds = 0;
+
+  if (operation === 'set') {
+    inputElement = setTimeInput;
+  } else {
+    inputElement = timeInput;
+  }
+
+  if (!inputElement) {
+    console.error('Input element not found for operation:', operation);
+    return;
+  }
+
+  const timeStr = inputElement.value.trim();
+  if (!timeStr) {
+    showSnackbar('Введите время', true);
+    return;
+  }
+
+  seconds = parseTimeToSeconds(timeStr);
+  if (seconds === null) {
+    showSnackbar('Неверный формат времени. Используйте HH:MM:SS', true);
+    return;
+  }
+
+  if (!currentTodoId) {
+    console.error('currentTodoId is not set');
+    showSnackbar('Ошибка: ID задачи не найден', true);
+    return;
+  }
+
+  try {
+    const requestBody = { operation, seconds };
+    console.log('Sending update-time request:', { todoId: currentTodoId, ...requestBody });
+
+    const response = await fetch(`${API_URL}/${currentTodoId}/update-time`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log('Response status:', response.status);
+
+    if (response.status === 401) {
+      window.location.href = '/';
+      return;
+    }
+
+    if (!response.ok) {
+      let errorMessage = 'неизвестная ошибка';
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          errorMessage = data.error || `Ошибка ${response.status}`;
+        } else {
+          const text = await response.text();
+          errorMessage = text || `Ошибка ${response.status}: ${response.statusText}`;
+        }
+      } catch (e) {
+        console.error('Error parsing error response:', e);
+        errorMessage = `Ошибка ${response.status}: ${response.statusText}`;
+      }
+      console.error('Ошибка обновления времени:', errorMessage);
+      showSnackbar(`Ошибка: ${errorMessage}`, true);
+      return;
+    }
+
+    const result = await response.json();
+    console.log('Update-time result:', result);
+    currentTotalTimeSeconds = result.total_time_seconds || 0;
+    updateTimeDisplay();
+    
+    // Очищаем поля ввода
+    if (timeInput) timeInput.value = '';
+    if (setTimeInput) setTimeInput.value = '';
+
+    const operationText = {
+      add: 'добавлено',
+      subtract: 'вычтено',
+      set: 'установлено'
+    }[operation] || 'изменено';
+
+    showSnackbar(`Время ${operationText}: ${formatSeconds(seconds)}`);
+  } catch (e) {
+    console.error('Ошибка обновления времени:', e);
+    showSnackbar(`Ошибка: ${e.message || 'Не удалось обновить время'}`, true);
   }
 }
 

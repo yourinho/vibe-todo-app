@@ -45,6 +45,42 @@
       </div>
     </div>
 
+    <div class="time-edit-section">
+      <div class="time-edit-header">
+        <span class="time-edit-label">Время работы:</span>
+        <span id="currentTimeDisplay" class="time-display">00:00:00</span>
+      </div>
+      <div class="time-edit-controls">
+        <div class="time-edit-group">
+          <label for="timeInput">Добавить/вычесть время (HH:MM:SS):</label>
+          <div class="time-input-group">
+            <input 
+              type="text" 
+              id="timeInput" 
+              placeholder="00:30:00" 
+              class="time-input"
+              pattern="[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]"
+            >
+            <button id="addTimeBtn" class="time-btn add-btn">+</button>
+            <button id="subtractTimeBtn" class="time-btn subtract-btn">-</button>
+          </div>
+        </div>
+        <div class="time-edit-group">
+          <label for="setTimeInput">Установить время (HH:MM:SS):</label>
+          <div class="time-input-group">
+            <input 
+              type="text" 
+              id="setTimeInput" 
+              placeholder="01:00:00" 
+              class="time-input"
+              pattern="[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]"
+            >
+            <button id="setTimeBtn" class="time-btn set-btn">Установить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="input-section" style="justify-content: flex-end;">
       <button id="saveTodoBtn" class="primary-btn">Сохранить</button>
     </div>

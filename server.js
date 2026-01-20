@@ -56,11 +56,22 @@ const db = new sqlite3.Database('./todos.db', (err) => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       todo_id INTEGER NOT NULL,
-      event_type TEXT NOT NULL, -- 'start' | 'pause'
+      event_type TEXT NOT NULL, -- 'start' | 'pause' | 'manual_add' | 'manual_subtract' | 'manual_set'
+      seconds_change INTEGER, -- изменение времени в секундах (для ручных операций)
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (todo_id) REFERENCES todos(id)
     )`);
+
+    // Миграция для добавления поля seconds_change
+    db.run(
+      'ALTER TABLE todo_logs ADD COLUMN seconds_change INTEGER',
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции seconds_change:', err.message);
+        }
+      }
+    );
 
     // Простейшая миграция для уже существующей таблицы todos
     db.run(
@@ -224,6 +235,95 @@ app.get('/api/user', (req, res) => {
 });
 
 // API Routes для задач (требуют авторизации)
+
+// Специфичные маршруты должны быть ПЕРЕД общими маршрутами /api/todos/:id
+
+// Обновление времени задачи вручную
+app.post('/api/todos/:id/update-time', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { operation, seconds } = req.body;
+
+  if (!operation || seconds === undefined) {
+    res.status(400).json({ error: 'Не указаны операция или количество секунд' });
+    return;
+  }
+
+  const secondsNum = typeof seconds === 'string' ? parseInt(seconds, 10) : Number(seconds);
+  
+  if (isNaN(secondsNum) || secondsNum < 0) {
+    res.status(400).json({ error: 'Неверное количество секунд' });
+    return;
+  }
+
+  if (!['add', 'subtract', 'set'].includes(operation)) {
+    res.status(400).json({ error: 'Неверная операция. Допустимые: add, subtract, set' });
+    return;
+  }
+
+  db.get(
+    'SELECT * FROM todos WHERE id = ? AND user_id = ?',
+    [id, req.session.userId],
+    (err, todo) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+
+      if (!todo) {
+        res.status(404).json({ error: 'Задача не найдена' });
+        return;
+      }
+
+      const currentTime = todo.total_time_seconds || 0;
+      let newTime = currentTime;
+      let eventType = '';
+      let secondsChange = 0;
+
+      switch (operation) {
+        case 'add':
+          newTime = currentTime + secondsNum;
+          eventType = 'manual_add';
+          secondsChange = secondsNum;
+          break;
+        case 'subtract':
+          newTime = Math.max(0, currentTime - secondsNum);
+          eventType = 'manual_subtract';
+          secondsChange = -Math.min(secondsNum, currentTime);
+          break;
+        case 'set':
+          newTime = secondsNum;
+          eventType = 'manual_set';
+          secondsChange = secondsNum - currentTime;
+          break;
+        default:
+          res.status(400).json({ error: 'Неверная операция' });
+          return;
+      }
+
+      db.run(
+        'UPDATE todos SET total_time_seconds = ? WHERE id = ? AND user_id = ?',
+        [newTime, id, req.session.userId],
+        function(updateErr) {
+          if (updateErr) {
+            res.status(500).json({ error: updateErr.message });
+            return;
+          }
+
+          db.run(
+            'INSERT INTO todo_logs (user_id, todo_id, event_type, seconds_change) VALUES (?, ?, ?, ?)',
+            [req.session.userId, id, eventType, secondsChange],
+            (logErr) => {
+              if (logErr) {
+                console.error('Ошибка записи лога (manual time update):', logErr.message);
+              }
+              res.json({ message: 'Время обновлено', total_time_seconds: newTime });
+            }
+          );
+        }
+      );
+    }
+  );
+});
 
 // Получить одну задачу по id
 app.get('/api/todos/:id', requireAuth, (req, res) => {
@@ -498,7 +598,7 @@ app.get('/api/todos/:id/logs', requireAuth, (req, res) => {
   const { id } = req.params;
 
   db.all(
-    'SELECT event_type, created_at FROM todo_logs WHERE user_id = ? AND todo_id = ? ORDER BY created_at DESC',
+    'SELECT event_type, seconds_change, created_at FROM todo_logs WHERE user_id = ? AND todo_id = ? ORDER BY created_at DESC',
     [req.session.userId, id],
     (err, rows) => {
       if (err) {

@@ -334,12 +334,35 @@ function hideLogModal() {
   }
 }
 
-function formatLogEvent(eventType) {
+// Форматирование секунд в HH:MM:SS (для использования в логах)
+function formatSecondsForLog(totalSeconds) {
+  const sec = Math.max(0, Math.floor(totalSeconds || 0));
+  const hours = Math.floor(sec / 3600);
+  const minutes = Math.floor((sec % 3600) / 60);
+  const seconds = sec % 60;
+
+  const hStr = hours.toString().padStart(2, '0');
+  const mStr = minutes.toString().padStart(2, '0');
+  const sStr = seconds.toString().padStart(2, '0');
+
+  return `${hStr}:${mStr}:${sStr}`;
+}
+
+function formatLogEvent(eventType, secondsChange) {
   switch (eventType) {
     case 'start':
       return 'Старт таймера';
     case 'pause':
       return 'Пауза таймера';
+    case 'manual_add':
+      const addTime = formatSecondsForLog(Math.abs(secondsChange || 0));
+      return `Добавлено времени: ${addTime}`;
+    case 'manual_subtract':
+      const subTime = formatSecondsForLog(Math.abs(secondsChange || 0));
+      return `Вычтено времени: ${subTime}`;
+    case 'manual_set':
+      const setTime = formatSecondsForLog(Math.abs(secondsChange || 0));
+      return `Установлено время: ${setTime}`;
     default:
       return eventType;
   }
@@ -376,7 +399,7 @@ async function openTodoLog(id, text) {
 
           const eventSpan = document.createElement('span');
           eventSpan.className = 'log-event';
-          eventSpan.textContent = formatLogEvent(entry.event_type);
+          eventSpan.textContent = formatLogEvent(entry.event_type, entry.seconds_change);
 
           const timeSpan = document.createElement('span');
           timeSpan.className = 'log-time';
