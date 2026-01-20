@@ -76,6 +76,8 @@ async function init() {
   });
 
   setupToolbar();
+  setupResizeHandle();
+  setupLinkDetection();
 
   await ensureAuth();
   await loadTodo();
@@ -208,6 +210,128 @@ async function saveTodo() {
   }
 }
 
+function setupResizeHandle() {
+  const resizeHandle = document.getElementById('resizeHandle');
+  if (!resizeHandle || !descriptionEditor) return;
+
+  let isResizing = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startY = e.clientY;
+    startHeight = descriptionEditor.offsetHeight;
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    const diff = e.clientY - startY;
+    const newHeight = Math.max(80, Math.min(600, startHeight + diff));
+    descriptionEditor.style.height = `${newHeight}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    isResizing = false;
+  });
+}
+
+function setupLinkDetection() {
+  if (!descriptionEditor) return;
+
+  // Обработка кликов по ссылкам
+  descriptionEditor.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (link && link.href) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open(link.href, '_blank', 'noopener,noreferrer');
+      return false;
+    }
+  });
+
+  // Обработка вставки текста
+  descriptionEditor.addEventListener('paste', (e) => {
+    setTimeout(() => {
+      detectAndConvertLinks();
+      checkForChanges();
+    }, 10);
+  });
+
+  // Обработка ввода текста
+  descriptionEditor.addEventListener('input', () => {
+    // Не обрабатываем при каждом вводе, только при потере фокуса
+  });
+
+  // Обработка потери фокуса
+  descriptionEditor.addEventListener('blur', () => {
+    detectAndConvertLinks();
+    checkForChanges();
+  });
+}
+
+function detectAndConvertLinks() {
+  if (!descriptionEditor) return;
+
+  // Получаем HTML содержимое
+  let html = descriptionEditor.innerHTML;
+
+  // Регулярное выражение для поиска URL (не внутри тегов <a>)
+  // Ищем URL, которые еще не являются ссылками
+  const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/gi;
+
+  // Разбиваем HTML на части, чтобы не трогать существующие ссылки
+  const parts = html.split(/(<a[^>]*>.*?<\/a>)/gi);
+  
+  const processedParts = parts.map((part) => {
+    // Пропускаем уже существующие ссылки
+    if (part.match(/^<a[^>]*>.*?<\/a>$/i)) {
+      return part;
+    }
+    
+    // Ищем URL в текстовой части
+    return part.replace(urlRegex, (url) => {
+      // Проверяем, не является ли URL уже частью ссылки
+      // (простая проверка - если перед URL есть <a, значит это уже ссылка)
+      const beforeUrl = part.substring(0, part.indexOf(url));
+      if (beforeUrl.includes('<a')) {
+        return url;
+      }
+      
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    });
+  });
+
+  const newHtml = processedParts.join('');
+  
+  // Обновляем только если что-то изменилось
+  if (newHtml !== html) {
+    // Сохраняем позицию курсора
+    const selection = window.getSelection();
+    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const offset = range ? range.startOffset : 0;
+    
+    descriptionEditor.innerHTML = newHtml;
+    
+    // Восстанавливаем позицию курсора (упрощенная версия)
+    if (range && descriptionEditor.childNodes.length > 0) {
+      try {
+        const newRange = document.createRange();
+        const textNode = descriptionEditor.childNodes[0];
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+          newRange.setStart(textNode, Math.min(offset, textNode.textContent.length));
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
+      } catch (e) {
+        // Игнорируем ошибки восстановления курсора
+      }
+    }
+  }
+}
+
 function setupChangeTracking() {
   // Отслеживание изменений в названии
   if (titleInput) {
@@ -219,7 +343,10 @@ function setupChangeTracking() {
   if (descriptionEditor) {
     descriptionEditor.addEventListener('input', checkForChanges);
     descriptionEditor.addEventListener('paste', () => {
-      setTimeout(checkForChanges, 10);
+      setTimeout(() => {
+        detectAndConvertLinks();
+        checkForChanges();
+      }, 10);
     });
   }
 }

@@ -33,12 +33,15 @@
           <button type="button" class="toolbar-btn" data-cmd="formatBlock" data-value="h3">H3</button>
           <button type="button" class="toolbar-btn" data-cmd="createLink">Ссылка</button>
         </div>
-        <div 
-          id="todoDescriptionEditor" 
-          class="description-editor" 
-          contenteditable="true"
-          placeholder="Описание задачи. Поддерживаются заголовки, жирный, курсив, списки, ссылки..."
-        ></div>
+        <div class="description-editor-wrapper">
+          <div 
+            id="todoDescriptionEditor" 
+            class="description-editor" 
+            contenteditable="true"
+            placeholder="Описание задачи. Поддерживаются заголовки, жирный, курсив, списки, ссылки..."
+          ></div>
+          <div class="resize-handle" id="resizeHandle"></div>
+        </div>
       </div>
     </div>
 
