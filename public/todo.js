@@ -11,6 +11,11 @@ const backBtn = document.getElementById('backToList');
 const saveBtn = document.getElementById('saveTodoBtn');
 const statusEl = document.getElementById('todoStatus');
 const snackbarEl = document.getElementById('snackbar');
+const statusDropdownWrap = document.getElementById('statusDropdownTodoWrap');
+const statusDropdownTrigger = document.getElementById('statusDropdownTodoTrigger');
+const statusDropdownMenu = document.getElementById('statusDropdownTodoMenu');
+const statusDropdownValue = statusDropdownTrigger?.querySelector('.status-dropdown-todo-value');
+const statusHiddenInput = document.getElementById('todoStatus');
 const confirmExitModal = document.getElementById('confirmExitModal');
 const confirmExitBtn = document.getElementById('confirmExitBtn');
 const cancelExitBtn = document.getElementById('cancelExitBtn');
@@ -32,8 +37,10 @@ let currentTodoId = null;
 let currentTodoTags = [];
 let savedText = '';
 let savedDescription = '';
+let savedStatus = 'backlog';
 let hasUnsavedChanges = false;
 let currentTotalTimeSeconds = 0;
+const STATUS_LABELS = { backlog: 'Backlog', roadmap: 'Roadmap', sprint: 'Sprint', today: 'Today', waiting: 'Waiting', in_progress: 'In Progress', done: 'Done' };
 
 document.addEventListener('DOMContentLoaded', () => {
   init();
@@ -99,6 +106,7 @@ async function init() {
   setupLinkDetection();
   setupTimeEditing();
   setupTagsUI();
+  setupStatusDropdown();
 
   // Сначала загружаем задачу (GET /api/todos/:id), затем проверка сессии
   await loadTodo();
@@ -351,9 +359,14 @@ async function loadTodo() {
     // Сохраняем начальное состояние
     savedText = todo.text || '';
     savedDescription = todo.description || '';
+    savedStatus = todo.status_saved || todo.status || 'backlog';
     currentTotalTimeSeconds = todo.total_time_seconds || 0;
     currentTodoTags = todo.tags || [];
     hasUnsavedChanges = false;
+    
+    // Обновляем статус (показываем финальный, но сохраняем пользовательский)
+    updateStatusDisplay(todo.status || 'backlog');
+    if (statusHiddenInput) statusHiddenInput.value = savedStatus;
     
     updateTimeDisplay();
     updateStatusAndSaveButton();
@@ -378,13 +391,15 @@ async function saveTodo() {
     description = clean || null;
   }
 
+  const status = statusHiddenInput?.value || 'backlog';
+
   try {
     const response = await fetch(`${API_URL}/${currentTodoId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text, description }),
+      body: JSON.stringify({ text, description, status }),
     });
 
     if (response.status === 401) {
@@ -402,6 +417,7 @@ async function saveTodo() {
     // Обновляем сохраненное состояние
     savedText = text;
     savedDescription = description;
+    savedStatus = status;
     hasUnsavedChanges = false;
     
     updateStatusAndSaveButton();
@@ -759,6 +775,85 @@ function setStatus(message, isError = false) {
   if (!statusEl) return;
   statusEl.textContent = message;
   statusEl.style.color = isError ? '#e03131' : '#777';
+}
+
+function setupStatusDropdown() {
+  if (!statusDropdownWrap || !statusDropdownTrigger || !statusDropdownMenu) return;
+
+  const items = statusDropdownMenu.querySelectorAll('.status-dropdown-todo-item');
+
+  function openMenu() {
+    updateMenuSelection();
+    statusDropdownMenu.style.minWidth = Math.max(136, statusDropdownTrigger.offsetWidth) + 'px';
+    statusDropdownMenu.classList.add('is-open');
+    statusDropdownWrap.setAttribute('data-open', 'true');
+    statusDropdownTrigger.setAttribute('aria-expanded', 'true');
+    statusDropdownMenu.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeMenu() {
+    statusDropdownMenu.classList.remove('is-open');
+    statusDropdownWrap.setAttribute('data-open', 'false');
+    statusDropdownTrigger.setAttribute('aria-expanded', 'false');
+    statusDropdownMenu.setAttribute('aria-hidden', 'true');
+  }
+
+  function toggleMenu() {
+    if (statusDropdownMenu.classList.contains('is-open')) closeMenu();
+    else openMenu();
+  }
+
+  function updateMenuSelection() {
+    const value = statusHiddenInput?.value || 'backlog';
+    items.forEach((el) => {
+      const selected = el.dataset.value === value;
+      el.classList.toggle('is-selected', selected);
+      el.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+  }
+
+  function selectItem(item) {
+    const value = item.dataset.value;
+    const textEl = item.querySelector('.status-dropdown-todo-item-text');
+    const text = (textEl && textEl.textContent.trim()) || STATUS_LABELS[value] || value;
+    if (statusHiddenInput) statusHiddenInput.value = value;
+    if (statusDropdownValue) statusDropdownValue.textContent = text;
+    savedStatus = value;
+    hasUnsavedChanges = true;
+    updateStatusAndSaveButton();
+    closeMenu();
+  }
+
+  statusDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+
+  items.forEach((item) => {
+    item.addEventListener('click', () => selectItem(item));
+  });
+
+  document.addEventListener('click', (e) => {
+    if (statusDropdownMenu.classList.contains('is-open') && !statusDropdownWrap.contains(e.target)) closeMenu();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && statusDropdownMenu.classList.contains('is-open')) closeMenu();
+  });
+}
+
+function updateStatusDisplay(finalStatus) {
+  // Показываем финальный статус (может быть in_progress или done)
+  const label = STATUS_LABELS[finalStatus] || finalStatus;
+  if (statusDropdownValue) statusDropdownValue.textContent = label;
+  
+  // Если статус in_progress или done, делаем дропдаун неактивным (readonly)
+  const isReadonly = finalStatus === 'in_progress' || finalStatus === 'done';
+  if (statusDropdownTrigger) {
+    statusDropdownTrigger.disabled = isReadonly;
+    statusDropdownTrigger.style.opacity = isReadonly ? '0.6' : '1';
+    statusDropdownTrigger.style.cursor = isReadonly ? 'not-allowed' : 'pointer';
+  }
 }
 
 function showSnackbar(message, isError = false) {

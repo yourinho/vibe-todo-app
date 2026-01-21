@@ -119,6 +119,33 @@ const db = new sqlite3.Database('./todos.db', (err) => {
         }
       }
     );
+
+    db.run(
+      "ALTER TABLE todos ADD COLUMN status TEXT DEFAULT 'backlog'",
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции status:', err.message);
+        }
+      }
+    );
+
+    db.run(
+      "ALTER TABLE todo_logs ADD COLUMN status_old TEXT",
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции status_old:', err.message);
+        }
+      }
+    );
+
+    db.run(
+      "ALTER TABLE todo_logs ADD COLUMN status_new TEXT",
+      (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Ошибка миграции status_new:', err.message);
+        }
+      }
+    );
   }
 });
 
@@ -521,6 +548,13 @@ app.get('/api/todos/:id', requireAuth, (req, res) => {
         [row.id],
         (e, tagRows) => {
           const tags = (e || !tagRows) ? [] : tagRows;
+          // Вычисляем финальный статус: done > in_progress > сохраненный статус
+          let finalStatus = row.status || 'backlog';
+          if (row.completed === 1) {
+            finalStatus = 'done';
+          } else if (row.timer_started_at) {
+            finalStatus = 'in_progress';
+          }
           res.json({
             id: row.id,
             user_id: row.user_id,
@@ -530,6 +564,8 @@ app.get('/api/todos/:id', requireAuth, (req, res) => {
             created_at: row.created_at,
             total_time_seconds: row.total_time_seconds != null ? row.total_time_seconds : 0,
             timer_started_at: row.timer_started_at,
+            status: finalStatus,
+            status_saved: row.status || 'backlog', // сохраненный пользовательский статус
             tags
           });
         }
@@ -539,18 +575,24 @@ app.get('/api/todos/:id', requireAuth, (req, res) => {
 });
 
 // Получить все задачи текущего пользователя (с тегами)
-// Query: ?status=all|open|closed|active
+// Query: ?status=all|backlog|roadmap|sprint|today|waiting|in_progress|done
 app.get('/api/todos', requireAuth, (req, res) => {
   const status = (req.query.status || 'all').toLowerCase();
   let where = 'user_id = ?';
   const params = [req.session.userId];
 
-  if (status === 'open') {
-    where += ' AND completed = 0';
-  } else if (status === 'closed') {
+  if (status === 'all') {
+    // Показываем все задачи без дополнительных фильтров
+  } else if (['backlog', 'roadmap', 'sprint', 'today', 'waiting'].includes(status)) {
+    // Фильтр по пользовательскому статусу (исключаем задачи с таймером и завершенные)
+    where += ' AND status = ? AND completed = 0 AND timer_started_at IS NULL';
+    params.push(status);
+  } else if (status === 'in_progress') {
+    // Задачи с запущенным таймером (независимо от сохраненного статуса)
+    where += ' AND timer_started_at IS NOT NULL AND completed = 0';
+  } else if (status === 'done') {
+    // Завершенные задачи
     where += ' AND completed = 1';
-  } else if (status === 'active') {
-    where += ' AND completed = 0 AND timer_started_at IS NOT NULL';
   }
 
   db.all(
@@ -565,7 +607,30 @@ app.get('/api/todos', requireAuth, (req, res) => {
         res.json([]);
         return;
       }
-      const ids = rows.map((r) => r.id);
+      
+      // Фильтруем по вычисленному статусу после получения данных
+      let filteredRows = rows;
+      if (status !== 'all' && ['backlog', 'roadmap', 'sprint', 'today', 'waiting', 'in_progress', 'done'].includes(status)) {
+        filteredRows = rows.filter((r) => {
+          // Вычисляем финальный статус
+          let finalStatus;
+          if (r.completed === 1) {
+            finalStatus = 'done';
+          } else if (r.timer_started_at) {
+            finalStatus = 'in_progress';
+          } else {
+            finalStatus = r.status || 'backlog';
+          }
+          return finalStatus === status;
+        });
+      }
+      
+      if (filteredRows.length === 0) {
+        res.json([]);
+        return;
+      }
+      
+      const ids = filteredRows.map((r) => r.id);
       const placeholders = ids.map(() => '?').join(',');
       db.all(
         `SELECT tt.todo_id, t.id AS tag_id, t.name AS tag_name, t.color AS tag_color
@@ -582,8 +647,21 @@ app.get('/api/todos', requireAuth, (req, res) => {
             if (!byTodo[tr.todo_id]) byTodo[tr.todo_id] = [];
             byTodo[tr.todo_id].push({ id: tr.tag_id, name: tr.tag_name, color: tr.tag_color });
           });
-          rows.forEach((r) => { r.tags = byTodo[r.id] || []; });
-          res.json(rows);
+          filteredRows.forEach((r) => {
+            r.tags = byTodo[r.id] || [];
+            // Сохраняем пользовательский статус
+            const savedStatus = r.status || 'backlog';
+            r.status_saved = savedStatus;
+            // Вычисляем финальный статус: done > in_progress > сохраненный статус
+            if (r.completed === 1) {
+              r.status = 'done';
+            } else if (r.timer_started_at) {
+              r.status = 'in_progress';
+            } else {
+              r.status = savedStatus;
+            }
+          });
+          res.json(filteredRows);
         }
       );
     }
@@ -592,15 +670,18 @@ app.get('/api/todos', requireAuth, (req, res) => {
 
 // Создать новую задачу
 app.post('/api/todos', requireAuth, (req, res) => {
-  const { text, description } = req.body;
+  const { text, description, status } = req.body;
   if (!text || text.trim() === '') {
     res.status(400).json({ error: 'Текст задачи обязателен' });
     return;
   }
 
+  const validStatuses = ['backlog', 'roadmap', 'sprint', 'today', 'waiting'];
+  const taskStatus = (status && validStatuses.includes(status)) ? status : 'backlog';
+
   db.run(
-    'INSERT INTO todos (user_id, text, description) VALUES (?, ?, ?)',
-    [req.session.userId, text.trim(), description || null],
+    'INSERT INTO todos (user_id, text, description, status) VALUES (?, ?, ?, ?)',
+    [req.session.userId, text.trim(), description || null, taskStatus],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
@@ -614,7 +695,7 @@ app.post('/api/todos', requireAuth, (req, res) => {
           if (logErr) console.error('Ошибка записи лога (create):', logErr.message);
         }
       );
-      res.json({ id: newId, text: text.trim(), description: description || null, completed: 0 });
+      res.json({ id: newId, text: text.trim(), description: description || null, completed: 0, status: taskStatus });
     }
   );
 });
@@ -622,7 +703,7 @@ app.post('/api/todos', requireAuth, (req, res) => {
 // Обновить задачу
 app.put('/api/todos/:id', requireAuth, (req, res) => {
   const { id } = req.params;
-  const { text, description, completed } = req.body;
+  const { text, description, completed, status } = req.body;
 
   // Проверяем, что задача принадлежит текущему пользователю
   db.get(
@@ -651,6 +732,20 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
       if (description !== undefined) {
         updates.push('description = ?');
         params.push(description || null);
+      }
+
+      let statusChanged = false;
+      let oldStatus = null;
+      if (status !== undefined) {
+        const validStatuses = ['backlog', 'roadmap', 'sprint', 'today', 'waiting'];
+        if (validStatuses.includes(status)) {
+          oldStatus = todo.status || 'backlog';
+          if (oldStatus !== status) {
+            statusChanged = true;
+            updates.push('status = ?');
+            params.push(status);
+          }
+        }
       }
 
       if (completed !== undefined) {
@@ -696,6 +791,18 @@ app.put('/api/todos/:id', requireAuth, (req, res) => {
           res.status(500).json({ error: err.message });
           return;
         }
+        
+        // Логируем изменение статуса
+        if (statusChanged) {
+          db.run(
+            'INSERT INTO todo_logs (user_id, todo_id, event_type, status_old, status_new) VALUES (?, ?, ?, ?, ?)',
+            [req.session.userId, id, 'status_change', oldStatus, status],
+            (statusLogErr) => {
+              if (statusLogErr) console.error('Ошибка записи лога (status_change):', statusLogErr.message);
+            }
+          );
+        }
+        
         if (loggingComplete) {
           db.run(
             'INSERT INTO todo_logs (user_id, todo_id, event_type) VALUES (?, ?, ?)',
@@ -848,7 +955,7 @@ app.get('/api/todos/:id/logs', requireAuth, (req, res) => {
   const { id } = req.params;
 
   db.all(
-    'SELECT event_type, seconds_change, created_at FROM todo_logs WHERE user_id = ? AND todo_id = ? ORDER BY created_at DESC',
+    'SELECT event_type, seconds_change, status_old, status_new, created_at FROM todo_logs WHERE user_id = ? AND todo_id = ? ORDER BY created_at DESC',
     [req.session.userId, id],
     (err, rows) => {
       if (err) {

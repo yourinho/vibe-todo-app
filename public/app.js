@@ -1,7 +1,17 @@
 const API_URL = '/api/todos';
 const AUTH_API = '/api';
 const STATUS_FILTER_STORAGE_KEY = 'todoStatusFilter';
-const STATUS_FILTER_LABELS = { all: 'Все', open: 'Открытые', closed: 'Закрытые', active: 'Активная (с таймером)' };
+const STATUS_FILTER_LABELS = { 
+  all: 'All',
+  backlog: 'Backlog',
+  roadmap: 'Roadmap',
+  sprint: 'Sprint',
+  today: 'Today',
+  waiting: 'Waiting',
+  in_progress: 'In Progress',
+  done: 'Done'
+};
+const STATUS_LABELS = { backlog: 'Backlog', roadmap: 'Roadmap', sprint: 'Sprint', today: 'Today', waiting: 'Waiting', in_progress: 'In Progress', done: 'Done' };
 
 // Элементы DOM для авторизации
 const authContainer = document.getElementById('authContainer');
@@ -200,6 +210,12 @@ function showApp(user) {
       if (statusFilterEl) statusFilterEl.value = saved;
       const valueSpan = document.querySelector('.status-dropdown-value');
       if (valueSpan) valueSpan.textContent = STATUS_FILTER_LABELS[saved];
+    } else {
+      // Если сохранен старый фильтр (open, closed, active), сбрасываем на all
+      if (statusFilterEl) statusFilterEl.value = 'all';
+      const valueSpan = document.querySelector('.status-dropdown-value');
+      if (valueSpan) valueSpan.textContent = STATUS_FILTER_LABELS.all;
+      sessionStorage.setItem(STATUS_FILTER_STORAGE_KEY, 'all');
     }
   } catch (_) {}
 
@@ -443,7 +459,9 @@ function formatSecondsForLog(totalSeconds) {
   return `${hStr}:${mStr}:${sStr}`;
 }
 
-function formatLogEvent(eventType, secondsChange) {
+const STATUS_LABELS_RU = { backlog: 'Backlog', roadmap: 'Roadmap', sprint: 'Sprint', today: 'Today', waiting: 'Waiting', in_progress: 'In Progress', done: 'Done' };
+
+function formatLogEvent(eventType, secondsChange, statusOld, statusNew) {
   switch (eventType) {
     case 'create':
       return 'Создание задачи';
@@ -462,6 +480,10 @@ function formatLogEvent(eventType, secondsChange) {
     case 'manual_set':
       const setTime = formatSecondsForLog(Math.abs(secondsChange || 0));
       return `Установлено время: ${setTime}`;
+    case 'status_change':
+      const oldLabel = STATUS_LABELS_RU[statusOld] || statusOld || 'Backlog';
+      const newLabel = STATUS_LABELS_RU[statusNew] || statusNew || 'Backlog';
+      return `Изменение статуса: ${oldLabel} → ${newLabel}`;
     default:
       return eventType;
   }
@@ -498,7 +520,7 @@ async function openTodoLog(id, text) {
 
           const eventSpan = document.createElement('span');
           eventSpan.className = 'log-event';
-          eventSpan.textContent = formatLogEvent(entry.event_type, entry.seconds_change);
+          eventSpan.textContent = formatLogEvent(entry.event_type, entry.seconds_change, entry.status_old, entry.status_new);
 
           const timeSpan = document.createElement('span');
           timeSpan.className = 'log-time';
@@ -528,9 +550,16 @@ function renderTodos(todos) {
   
   if (todos.length === 0) {
     const filter = statusFilterEl && statusFilterEl.value;
-    const msg = filter === 'active'
-      ? 'Нет задачи с запущенным таймером'
-      : 'Нет задач. Добавьте первую!';
+    let msg = 'Нет задач. Добавьте первую!';
+    
+    if (filter === 'in_progress') {
+      msg = 'Нет задачи с запущенным таймером';
+    } else if (filter === 'done') {
+      msg = 'Нет завершенных задач';
+    } else if (STATUS_FILTER_LABELS[filter]) {
+      msg = `Нет задач со статусом "${STATUS_FILTER_LABELS[filter]}"`;
+    }
+    
     todoList.innerHTML = `<li class="empty-state">${msg}</li>`;
     return;
   }
@@ -549,6 +578,15 @@ function renderTodos(todos) {
     text.className = 'todo-text';
     text.href = `todo.html?id=${todo.id}`;
     text.textContent = todo.text;
+
+    // Бейдж статуса
+    if (todo.status) {
+      const statusBadge = document.createElement('span');
+      statusBadge.className = 'todo-status-badge';
+      statusBadge.textContent = STATUS_LABELS[todo.status] || todo.status;
+      statusBadge.setAttribute('data-status', todo.status);
+      li.appendChild(statusBadge);
+    }
 
     li.addEventListener('click', (e) => {
       if (e.target.closest('button, input, a')) return;

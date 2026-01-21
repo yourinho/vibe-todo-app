@@ -64,6 +64,26 @@
       </div>
     </div>
 
+    <div class="status-section">
+      <div class="status-section-header">
+        <span class="status-label">Статус:</span>
+        <div class="status-dropdown-todo" id="statusDropdownTodoWrap">
+          <input type="hidden" id="todoStatus" name="status" value="backlog">
+          <button type="button" class="status-dropdown-todo-trigger" id="statusDropdownTodoTrigger" aria-haspopup="listbox" aria-expanded="false">
+            <span class="status-dropdown-todo-value">Backlog</span>
+            <svg class="status-dropdown-todo-arrow" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8 L10 12 L14 8" stroke="#777E90" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="status-dropdown-todo-menu" id="statusDropdownTodoMenu" role="listbox" aria-hidden="true">
+            <div class="status-dropdown-todo-item is-selected" role="option" data-value="backlog"><span class="status-dropdown-todo-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-todo-item-text">Backlog</span></div>
+            <div class="status-dropdown-todo-item" role="option" data-value="roadmap"><span class="status-dropdown-todo-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-todo-item-text">Roadmap</span></div>
+            <div class="status-dropdown-todo-item" role="option" data-value="sprint"><span class="status-dropdown-todo-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-todo-item-text">Sprint</span></div>
+            <div class="status-dropdown-todo-item" role="option" data-value="today"><span class="status-dropdown-todo-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-todo-item-text">Today</span></div>
+            <div class="status-dropdown-todo-item" role="option" data-value="waiting"><span class="status-dropdown-todo-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-todo-item-text">Waiting</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="time-edit-section">
       <div class="time-edit-header">
         <span class="time-edit-label">Время работы:</span>

@@ -466,6 +466,54 @@ h2 {
   color: #999;
 }
 
+.todo-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #2C3534;
+  background: #f0f0f0;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.todo-status-badge[data-status="backlog"] {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.todo-status-badge[data-status="roadmap"] {
+  background: #e7f5ff;
+  color: #1971c2;
+}
+
+.todo-status-badge[data-status="sprint"] {
+  background: #fff3bf;
+  color: #977404;
+}
+
+.todo-status-badge[data-status="today"] {
+  background: #d3f9d8;
+  color: #2f9e44;
+}
+
+.todo-status-badge[data-status="waiting"] {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.todo-status-badge[data-status="in_progress"] {
+  background: #d0ebff;
+  color: #1971c2;
+}
+
+.todo-status-badge[data-status="done"] {
+  background: #d3f9d8;
+  color: #2f9e44;
+}
+
 .delete-btn {
   background: #ff6b6b;
   color: white;
@@ -1036,4 +1084,150 @@ h2 {
   border-radius: 4px;
   font-size: 11px;
   color: #fff;
+}
+
+/* Секция статуса на странице задачи */
+.status-section {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.status-section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.status-dropdown-todo {
+  position: relative;
+  box-sizing: border-box;
+}
+
+.status-dropdown-todo-trigger {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 40px;
+  min-width: 160px;
+  background: #ffffff;
+  border: 1px solid #E6E8EC;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.status-dropdown-todo-trigger:hover {
+  border-color: #d1d5dc;
+}
+
+.status-dropdown-todo-trigger:focus,
+.status-dropdown-todo-trigger[aria-expanded="true"] {
+  border-color: #667eea;
+}
+
+.status-dropdown-todo-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: #777E90;
+}
+
+.status-dropdown-todo-arrow {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s;
+}
+
+.status-dropdown-todo[data-open="true"] .status-dropdown-todo-arrow {
+  transform: rotate(180deg);
+}
+
+.status-dropdown-todo-menu {
+  box-sizing: border-box;
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  min-width: 136px;
+  width: max-content;
+  background: #ffffff;
+  box-shadow: 0px 0px 1px rgba(53, 57, 69, 0.24), 0px 12px 16px -20px rgba(15, 15, 15, 0.06);
+  border-radius: 16px;
+  z-index: 200;
+}
+
+.status-dropdown-todo-menu.is-open {
+  display: flex;
+}
+
+.status-dropdown-todo-item {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 12px;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  background: #ffffff;
+  border-radius: 8px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  color: #2C3534;
+  cursor: pointer;
+  flex: none;
+  align-self: stretch;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.status-dropdown-todo-item:hover {
+  background: #f5f5f5;
+}
+
+.status-dropdown-todo-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  color: #2C3534;
+}
+
+.status-dropdown-todo-item.is-selected .status-dropdown-todo-check {
+  opacity: 1;
+}
+
+.status-dropdown-todo-item-text {
+  flex: 1;
+  min-width: 0;
 }
