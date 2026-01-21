@@ -1,5 +1,7 @@
 const API_URL = '/api/todos';
 const AUTH_API = '/api';
+const STATUS_FILTER_STORAGE_KEY = 'todoStatusFilter';
+const STATUS_FILTER_LABELS = { all: 'Все', open: 'Открытые', closed: 'Закрытые', active: 'Активная (с таймером)' };
 
 // Элементы DOM для авторизации
 const authContainer = document.getElementById('authContainer');
@@ -61,7 +63,10 @@ function setupEventListeners() {
   });
 
   if (statusFilterEl) {
-    statusFilterEl.addEventListener('change', () => loadTodos());
+    statusFilterEl.addEventListener('change', () => {
+      try { sessionStorage.setItem(STATUS_FILTER_STORAGE_KEY, statusFilterEl.value); } catch (_) {}
+      loadTodos();
+    });
   }
   setupStatusDropdown();
 
@@ -187,6 +192,17 @@ function showApp(user) {
   authContainer.style.display = 'none';
   appContainer.style.display = 'block';
   usernameDisplay.textContent = `Привет, ${user.username}!`;
+
+  // Восстановить выбранный фильтр из sessionStorage (после возврата из карточки задачи)
+  try {
+    const saved = sessionStorage.getItem(STATUS_FILTER_STORAGE_KEY);
+    if (saved && Object.prototype.hasOwnProperty.call(STATUS_FILTER_LABELS, saved)) {
+      if (statusFilterEl) statusFilterEl.value = saved;
+      const valueSpan = document.querySelector('.status-dropdown-value');
+      if (valueSpan) valueSpan.textContent = STATUS_FILTER_LABELS[saved];
+    }
+  } catch (_) {}
+
   loadTodos();
 }
 
