@@ -633,20 +633,20 @@ function renderTodos(todos) {
     const controlsContainer = document.createElement('div');
     controlsContainer.className = 'timer-controls';
 
-    const startBtn = document.createElement('button');
-    startBtn.className = 'timer-btn start-btn';
-    startBtn.textContent = todo.timer_started_at ? 'Продолжается' : 'Старт';
-    startBtn.disabled = !!todo.completed;
-    startBtn.addEventListener('click', () => handleStartClick(todo.id));
+    const isTimerRunning = !!todo.timer_started_at;
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = `timer-btn ${isTimerRunning ? 'pause-btn' : 'start-btn'}`;
+    toggleBtn.textContent = isTimerRunning ? 'Пауза' : 'Старт';
+    toggleBtn.disabled = !!todo.completed;
+    toggleBtn.addEventListener('click', () => {
+      if (isTimerRunning) {
+        pauseTimer(todo.id);
+      } else {
+        handleStartClick(todo.id);
+      }
+    });
 
-    const pauseBtn = document.createElement('button');
-    pauseBtn.className = 'timer-btn pause-btn';
-    pauseBtn.textContent = 'Пауза';
-    pauseBtn.disabled = !todo.timer_started_at || !!todo.completed;
-    pauseBtn.addEventListener('click', () => pauseTimer(todo.id));
-
-    controlsContainer.appendChild(startBtn);
-    controlsContainer.appendChild(pauseBtn);
+    controlsContainer.appendChild(toggleBtn);
 
     timerContainer.appendChild(timerLabel);
     timerContainer.appendChild(timerTime);
