@@ -63,6 +63,7 @@ function setupEventListeners() {
   if (statusFilterEl) {
     statusFilterEl.addEventListener('change', () => loadTodos());
   }
+  setupStatusDropdown();
 
   // Модальное окно переключения задачи
   if (modalConfirm && modalCancel && modalOverlay) {
@@ -85,6 +86,77 @@ function setupEventListeners() {
       }
     });
   }
+}
+
+// Кастомный дропдаун «Показать»
+function setupStatusDropdown() {
+  const wrap = document.getElementById('statusFilterWrap');
+  const trigger = document.getElementById('statusFilterTrigger');
+  const menu = document.getElementById('statusFilterMenu');
+  if (!wrap || !trigger || !menu) return;
+
+  const valueSpan = trigger.querySelector('.status-dropdown-value');
+  const items = menu.querySelectorAll('.status-dropdown-item');
+
+  function updateMenuSelection() {
+    const value = (statusFilterEl && statusFilterEl.value) || 'all';
+    items.forEach((el) => {
+      const selected = el.dataset.value === value;
+      el.classList.toggle('is-selected', selected);
+      el.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+  }
+
+  function openMenu() {
+    updateMenuSelection();
+    menu.style.minWidth = Math.max(136, trigger.offsetWidth) + 'px';
+    menu.classList.add('is-open');
+    wrap.setAttribute('data-open', 'true');
+    trigger.setAttribute('aria-expanded', 'true');
+    menu.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeMenu() {
+    menu.classList.remove('is-open');
+    wrap.setAttribute('data-open', 'false');
+    trigger.setAttribute('aria-expanded', 'false');
+    menu.setAttribute('aria-hidden', 'true');
+  }
+
+  function toggleMenu() {
+    if (menu.classList.contains('is-open')) closeMenu();
+    else openMenu();
+  }
+
+  function selectItem(item) {
+    const value = item.dataset.value;
+    const textEl = item.querySelector('.status-dropdown-item-text');
+    const text = (textEl && textEl.textContent.trim()) || item.textContent.trim();
+    if (statusFilterEl) {
+      statusFilterEl.value = value;
+      statusFilterEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (valueSpan) valueSpan.textContent = text;
+    updateMenuSelection();
+    closeMenu();
+  }
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+
+  items.forEach((item) => {
+    item.addEventListener('click', () => selectItem(item));
+  });
+
+  document.addEventListener('click', (e) => {
+    if (menu.classList.contains('is-open') && !wrap.contains(e.target)) closeMenu();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menu.classList.contains('is-open')) closeMenu();
+  });
 }
 
 // Проверка авторизации

@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>To-Do List</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -49,13 +52,20 @@
     </div>
 
     <div class="filter-section">
-      <label for="statusFilter">Показать:</label>
-      <select id="statusFilter">
-        <option value="all">Все</option>
-        <option value="open">Открытые</option>
-        <option value="closed">Закрытые</option>
-        <option value="active">Активная (с таймером)</option>
-      </select>
+      <label for="statusFilterTrigger">Показать:</label>
+      <div class="status-dropdown" id="statusFilterWrap">
+        <input type="hidden" id="statusFilter" name="status" value="all">
+        <button type="button" class="status-dropdown-trigger" id="statusFilterTrigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Показать">
+          <span class="status-dropdown-value">Все</span>
+          <svg class="status-dropdown-arrow" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8 L10 12 L14 8" stroke="#777E90" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="status-dropdown-menu" id="statusFilterMenu" role="listbox" aria-hidden="true">
+          <div class="status-dropdown-item is-selected" role="option" data-value="all"><span class="status-dropdown-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-item-text">Все</span></div>
+          <div class="status-dropdown-item" role="option" data-value="open"><span class="status-dropdown-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-item-text">Открытые</span></div>
+          <div class="status-dropdown-item" role="option" data-value="closed"><span class="status-dropdown-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-item-text">Закрытые</span></div>
+          <div class="status-dropdown-item" role="option" data-value="active"><span class="status-dropdown-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8 L6 11 L13 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="status-dropdown-item-text">Активная (с таймером)</span></div>
+        </div>
+      </div>
     </div>
 
     <ul id="todoList"></ul>
