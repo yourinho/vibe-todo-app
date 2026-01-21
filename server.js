@@ -539,10 +539,23 @@ app.get('/api/todos/:id', requireAuth, (req, res) => {
 });
 
 // Получить все задачи текущего пользователя (с тегами)
+// Query: ?status=all|open|closed|active
 app.get('/api/todos', requireAuth, (req, res) => {
+  const status = (req.query.status || 'all').toLowerCase();
+  let where = 'user_id = ?';
+  const params = [req.session.userId];
+
+  if (status === 'open') {
+    where += ' AND completed = 0';
+  } else if (status === 'closed') {
+    where += ' AND completed = 1';
+  } else if (status === 'active') {
+    where += ' AND completed = 0 AND timer_started_at IS NOT NULL';
+  }
+
   db.all(
-    'SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC',
-    [req.session.userId],
+    `SELECT * FROM todos WHERE ${where} ORDER BY created_at DESC`,
+    params,
     (err, rows) => {
       if (err) {
         res.status(500).json({ error: err.message });

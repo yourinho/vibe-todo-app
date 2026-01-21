@@ -17,6 +17,7 @@ const usernameDisplay = document.getElementById('usernameDisplay');
 const todoInput = document.getElementById('todoInput');
 const addBtn = document.getElementById('addBtn');
 const todoList = document.getElementById('todoList');
+const statusFilterEl = document.getElementById('statusFilter');
 
 // Элементы DOM для модального окна переключения задачи
 const modalOverlay = document.getElementById('modalOverlay');
@@ -58,6 +59,10 @@ function setupEventListeners() {
       addTodo();
     }
   });
+
+  if (statusFilterEl) {
+    statusFilterEl.addEventListener('change', () => loadTodos());
+  }
 
   // Модальное окно переключения задачи
   if (modalConfirm && modalCancel && modalOverlay) {
@@ -222,7 +227,9 @@ let pendingActiveTodoId = null;
 // Загрузка всех задач
 async function loadTodos() {
   try {
-    const response = await fetch(API_URL);
+    const status = (statusFilterEl && statusFilterEl.value) || 'all';
+    const url = `${API_URL}?status=${encodeURIComponent(status)}`;
+    const response = await fetch(url);
     if (response.status === 401) {
       showAuth();
       return;
@@ -432,7 +439,11 @@ function renderTodos(todos) {
   todoList.innerHTML = '';
   
   if (todos.length === 0) {
-    todoList.innerHTML = '<li class="empty-state">Нет задач. Добавьте первую!</li>';
+    const filter = statusFilterEl && statusFilterEl.value;
+    const msg = filter === 'active'
+      ? 'Нет задачи с запущенным таймером'
+      : 'Нет задач. Добавьте первую!';
+    todoList.innerHTML = `<li class="empty-state">${msg}</li>`;
     return;
   }
 
