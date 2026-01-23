@@ -32,6 +32,9 @@ const tagPickerListEl = document.getElementById('tagPickerList');
 const newTagNameInput = document.getElementById('newTagName');
 const tagColorPaletteEl = document.getElementById('tagColorPalette');
 const createTagBtn = document.getElementById('createTagBtn');
+const commentsListEl = document.getElementById('commentsList');
+const newCommentInput = document.getElementById('newCommentInput');
+const addCommentBtn = document.getElementById('addCommentBtn');
 
 let currentTodoId = null;
 let currentTodoTags = [];
@@ -107,6 +110,7 @@ async function init() {
   setupTimeEditing();
   setupTagsUI();
   setupStatusDropdown();
+  setupComments();
 
   // Сначала загружаем задачу (GET /api/todos/:id), затем проверка сессии
   await loadTodo();
@@ -125,6 +129,33 @@ function setupToolbar() {
       const value = btn.getAttribute('data-value') || null;
 
       descriptionEditor.focus();
+
+      if (cmd === 'createLink') {
+        const url = prompt('Введите URL ссылки:');
+        if (url) {
+          document.execCommand('createLink', false, url);
+        }
+        return;
+      }
+
+      if (cmd === 'formatBlock' && value) {
+        document.execCommand('formatBlock', false, value);
+      } else {
+        document.execCommand(cmd, false, value);
+      }
+    });
+  });
+
+  // Тулбар для комментариев
+  const commentToolbarButtons = document.querySelectorAll('.comment-toolbar .toolbar-btn');
+  commentToolbarButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!newCommentInput) return;
+      
+      const cmd = btn.getAttribute('data-cmd');
+      const value = btn.getAttribute('data-value') || null;
+
+      newCommentInput.focus();
 
       if (cmd === 'createLink') {
         const url = prompt('Введите URL ссылки:');
@@ -371,6 +402,7 @@ async function loadTodo() {
     updateTimeDisplay();
     updateStatusAndSaveButton();
     renderTags();
+    await loadComments();
   } catch (e) {
     console.error('Ошибка загрузки задачи:', e);
     setStatus('Не удалось загрузить задачу', true);
@@ -874,6 +906,346 @@ function updateStatusDisplay(finalStatus) {
     statusDropdownTrigger.disabled = isReadonly;
     statusDropdownTrigger.style.opacity = isReadonly ? '0.6' : '1';
     statusDropdownTrigger.style.cursor = isReadonly ? 'not-allowed' : 'pointer';
+  }
+}
+
+// Комментарии к задаче
+function setupComments() {
+  if (addCommentBtn) {
+    addCommentBtn.addEventListener('click', addComment);
+  }
+  if (newCommentInput) {
+    // Placeholder для contenteditable
+    newCommentInput.addEventListener('focus', () => {
+      if (!newCommentInput.textContent.trim()) {
+        newCommentInput.classList.add('empty');
+      }
+    });
+    newCommentInput.addEventListener('blur', () => {
+      if (!newCommentInput.textContent.trim()) {
+        newCommentInput.classList.add('empty');
+      } else {
+        newCommentInput.classList.remove('empty');
+      }
+    });
+    newCommentInput.addEventListener('input', () => {
+      if (newCommentInput.textContent.trim()) {
+        newCommentInput.classList.remove('empty');
+      }
+    });
+    
+    newCommentInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        addComment();
+      }
+    });
+  }
+}
+
+async function loadComments() {
+  if (!currentTodoId || !commentsListEl) return;
+  
+  try {
+    const response = await fetch(`${API_URL}/${currentTodoId}/comments`, {
+      credentials: 'include',
+      cache: 'no-store'
+    });
+    
+    if (response.status === 401) {
+      window.location.href = '/';
+      return;
+    }
+    
+    if (!response.ok) {
+      console.error('Ошибка загрузки комментариев:', response.status);
+      return;
+    }
+    
+    const comments = await response.json();
+    renderComments(comments || []);
+  } catch (e) {
+    console.error('Ошибка загрузки комментариев:', e);
+  }
+}
+
+function renderComments(comments) {
+  if (!commentsListEl) return;
+  
+  commentsListEl.innerHTML = '';
+  
+  if (comments.length === 0) {
+    const emptyMsg = document.createElement('div');
+    emptyMsg.className = 'comments-empty';
+    emptyMsg.textContent = 'Пока нет комментариев';
+    commentsListEl.appendChild(emptyMsg);
+    return;
+  }
+  
+  comments.forEach((comment) => {
+    const commentEl = createCommentElement(comment);
+    commentsListEl.appendChild(commentEl);
+  });
+}
+
+function createCommentElement(comment) {
+  const commentDiv = document.createElement('div');
+  commentDiv.className = 'comment-item';
+  commentDiv.dataset.commentId = comment.id;
+  
+  const isEdited = comment.updated_at && comment.updated_at !== comment.created_at;
+  const date = new Date(isEdited ? comment.updated_at : comment.created_at);
+  const dateStr = date.toLocaleString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  
+  // Используем innerHTML для сохранения форматирования (HTML из БД)
+  commentDiv.innerHTML = `
+    <div class="comment-content">
+      <div class="comment-text" data-comment-id="${comment.id}">${comment.text || ''}</div>
+      <div class="comment-meta">
+        <span class="comment-date">${dateStr}${isEdited ? ' (изменено)' : ''}</span>
+        <div class="comment-actions">
+          <button class="comment-edit-btn" data-comment-id="${comment.id}">Редактировать</button>
+          <button class="comment-delete-btn" data-comment-id="${comment.id}">Удалить</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  const editBtn = commentDiv.querySelector('.comment-edit-btn');
+  const deleteBtn = commentDiv.querySelector('.comment-delete-btn');
+  const textEl = commentDiv.querySelector('.comment-text');
+  
+  editBtn.addEventListener('click', () => editComment(comment.id, comment.text, commentDiv));
+  deleteBtn.addEventListener('click', () => deleteComment(comment.id));
+  
+  return commentDiv;
+}
+
+async function addComment() {
+  if (!currentTodoId || !newCommentInput) return;
+  
+  // Для contenteditable получаем innerHTML или textContent
+  const html = newCommentInput.innerHTML.trim();
+  const text = newCommentInput.textContent.trim();
+  
+  if (!text) {
+    showSnackbar('Введите текст комментария', true);
+    return;
+  }
+  
+  // Используем HTML для сохранения форматирования, но проверяем на пустоту по тексту
+  const commentText = html || text;
+  
+  try {
+    const response = await fetch(`${API_URL}/${currentTodoId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: commentText }),
+      credentials: 'include'
+    });
+    
+    if (response.status === 401) {
+      window.location.href = '/';
+      return;
+    }
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      showSnackbar(`Ошибка: ${error.error || 'Не удалось добавить комментарий'}`, true);
+      return;
+    }
+    
+    newCommentInput.innerHTML = '';
+    await loadComments();
+    showSnackbar('Комментарий добавлен');
+  } catch (e) {
+    console.error('Ошибка добавления комментария:', e);
+    showSnackbar('Не удалось добавить комментарий', true);
+  }
+}
+
+function editComment(commentId, currentText, commentDiv) {
+  const textEl = commentDiv.querySelector('.comment-text');
+  const editBtn = commentDiv.querySelector('.comment-edit-btn');
+  const deleteBtn = commentDiv.querySelector('.comment-delete-btn');
+  
+  // Создаем contenteditable div с тулбаром для редактирования
+  const editWrapper = document.createElement('div');
+  editWrapper.className = 'comment-edit-wrapper';
+  
+  const editToolbar = document.createElement('div');
+  editToolbar.className = 'comment-edit-toolbar';
+  editToolbar.innerHTML = `
+    <button type="button" class="toolbar-btn" data-cmd="bold" data-target="edit-comment"><b>B</b></button>
+    <button type="button" class="toolbar-btn" data-cmd="italic" data-target="edit-comment"><i>I</i></button>
+    <button type="button" class="toolbar-btn" data-cmd="underline" data-target="edit-comment"><u>U</u></button>
+    <button type="button" class="toolbar-btn" data-cmd="strikeThrough" data-target="edit-comment"><s>S</s></button>
+    <button type="button" class="toolbar-btn" data-cmd="insertUnorderedList" data-target="edit-comment">• Список</button>
+    <button type="button" class="toolbar-btn" data-cmd="formatBlock" data-value="h3" data-target="edit-comment">H3</button>
+    <button type="button" class="toolbar-btn" data-cmd="createLink" data-target="edit-comment">Ссылка</button>
+  `;
+  
+  const editInput = document.createElement('div');
+  editInput.className = 'comment-edit-input';
+  editInput.contentEditable = 'true';
+  editInput.innerHTML = currentText || '';
+  
+  editWrapper.appendChild(editToolbar);
+  editWrapper.appendChild(editInput);
+  
+  // Настраиваем тулбар для редактирования
+  const editToolbarButtons = editToolbar.querySelectorAll('.toolbar-btn');
+  editToolbarButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.getAttribute('data-cmd');
+      const value = btn.getAttribute('data-value') || null;
+      
+      editInput.focus();
+      
+      if (cmd === 'createLink') {
+        const url = prompt('Введите URL ссылки:');
+        if (url) {
+          document.execCommand('createLink', false, url);
+        }
+        return;
+      }
+      
+      if (cmd === 'formatBlock' && value) {
+        document.execCommand('formatBlock', false, value);
+      } else {
+        document.execCommand(cmd, false, value);
+      }
+    });
+  });
+  
+  // Заменяем текст на редактор
+  textEl.style.display = 'none';
+  textEl.parentNode.insertBefore(editWrapper, textEl);
+  editInput.focus();
+  
+  // Устанавливаем курсор в конец
+  const range = document.createRange();
+  range.selectNodeContents(editInput);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  // Создаем кнопки сохранения/отмены
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'comment-save-btn';
+  saveBtn.textContent = 'Сохранить';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'comment-cancel-btn';
+  cancelBtn.textContent = 'Отмена';
+  
+  const actionsDiv = commentDiv.querySelector('.comment-actions');
+  editBtn.style.display = 'none';
+  deleteBtn.style.display = 'none';
+  actionsDiv.appendChild(saveBtn);
+  actionsDiv.appendChild(cancelBtn);
+  
+  const saveHandler = async () => {
+    const html = editInput.innerHTML.trim();
+    const text = editInput.textContent.trim();
+    
+    if (!text) {
+      showSnackbar('Текст комментария не может быть пустым', true);
+      return;
+    }
+    
+    const newText = html || text;
+    
+    try {
+      const response = await fetch(`${API_URL}/${currentTodoId}/comments/${commentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: newText }),
+        credentials: 'include'
+      });
+      
+      if (response.status === 401) {
+        window.location.href = '/';
+        return;
+      }
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        showSnackbar(`Ошибка: ${error.error || 'Не удалось обновить комментарий'}`, true);
+        return;
+      }
+      
+      await loadComments();
+      showSnackbar('Комментарий обновлен');
+    } catch (e) {
+      console.error('Ошибка обновления комментария:', e);
+      showSnackbar('Не удалось обновить комментарий', true);
+    }
+  };
+  
+  const cancelHandler = () => {
+    editWrapper.remove();
+    textEl.style.display = '';
+    saveBtn.remove();
+    cancelBtn.remove();
+    editBtn.style.display = '';
+    deleteBtn.style.display = '';
+  };
+  
+  saveBtn.addEventListener('click', saveHandler);
+  cancelBtn.addEventListener('click', cancelHandler);
+  
+  editInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      saveHandler();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelHandler();
+    }
+  });
+}
+
+async function deleteComment(commentId) {
+  if (!currentTodoId) return;
+  
+  if (!confirm('Удалить этот комментарий?')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${API_URL}/${currentTodoId}/comments/${commentId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    
+    if (response.status === 401) {
+      window.location.href = '/';
+      return;
+    }
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      showSnackbar(`Ошибка: ${error.error || 'Не удалось удалить комментарий'}`, true);
+      return;
+    }
+    
+    await loadComments();
+    showSnackbar('Комментарий удален');
+  } catch (e) {
+    console.error('Ошибка удаления комментария:', e);
+    showSnackbar('Не удалось удалить комментарий', true);
   }
 }
 

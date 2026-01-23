@@ -120,6 +120,31 @@
       </div>
     </div>
 
+    <div class="comments-section">
+      <div class="comments-section-header">
+        <span class="comments-label">Комментарии:</span>
+      </div>
+      <div id="commentsList" class="comments-list"></div>
+      <div class="comment-add">
+        <div class="comment-toolbar">
+          <button type="button" class="toolbar-btn" data-cmd="bold" data-target="comment"><b>B</b></button>
+          <button type="button" class="toolbar-btn" data-cmd="italic" data-target="comment"><i>I</i></button>
+          <button type="button" class="toolbar-btn" data-cmd="underline" data-target="comment"><u>U</u></button>
+          <button type="button" class="toolbar-btn" data-cmd="strikeThrough" data-target="comment"><s>S</s></button>
+          <button type="button" class="toolbar-btn" data-cmd="insertUnorderedList" data-target="comment">• Список</button>
+          <button type="button" class="toolbar-btn" data-cmd="formatBlock" data-value="h3" data-target="comment">H3</button>
+          <button type="button" class="toolbar-btn" data-cmd="createLink" data-target="comment">Ссылка</button>
+        </div>
+        <div 
+          id="newCommentInput" 
+          class="comment-input" 
+          contenteditable="true"
+          placeholder="Добавить комментарий..."
+        ></div>
+        <button id="addCommentBtn" class="comment-add-btn">Добавить</button>
+      </div>
+    </div>
+
     <div class="input-section" style="justify-content: flex-end;">
       <button id="saveTodoBtn" class="primary-btn">Сохранить</button>
     </div>

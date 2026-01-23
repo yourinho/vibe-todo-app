@@ -82,6 +82,18 @@ const db = new sqlite3.Database('./todos.db', (err) => {
       FOREIGN KEY (tag_id) REFERENCES tags(id)
     )`);
 
+    // Таблица комментариев к задачам
+    db.run(`CREATE TABLE IF NOT EXISTS todo_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      todo_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (todo_id) REFERENCES todos(id)
+    )`);
+
     // Миграция для добавления поля seconds_change
     db.run(
       'ALTER TABLE todo_logs ADD COLUMN seconds_change INTEGER',
@@ -975,22 +987,170 @@ app.delete('/api/todos/:id', requireAuth, (req, res) => {
       res.status(500).json({ error: err1.message });
       return;
     }
-    db.run(
-      'DELETE FROM todos WHERE id = ? AND user_id = ?',
-      [id, req.session.userId],
-      function(err) {
-        if (err) {
-          res.status(500).json({ error: err.message });
-          return;
-        }
-        if (this.changes === 0) {
-          res.status(404).json({ error: 'Задача не найдена' });
-          return;
-        }
-        res.json({ message: 'Задача удалена' });
+    db.run('DELETE FROM todo_comments WHERE todo_id = ?', [id], (err2) => {
+      if (err2) {
+        res.status(500).json({ error: err2.message });
+        return;
       }
-    );
+      db.run(
+        'DELETE FROM todos WHERE id = ? AND user_id = ?',
+        [id, req.session.userId],
+        function(err) {
+          if (err) {
+            res.status(500).json({ error: err.message });
+            return;
+          }
+          if (this.changes === 0) {
+            res.status(404).json({ error: 'Задача не найдена' });
+            return;
+          }
+          res.json({ message: 'Задача удалена' });
+        }
+      );
+    });
   });
+});
+
+// API для комментариев к задачам
+
+// Получить все комментарии задачи
+app.get('/api/todos/:id/comments', requireAuth, (req, res) => {
+  const { id } = req.params;
+  
+  db.all(
+    'SELECT id, text, created_at, updated_at FROM todo_comments WHERE todo_id = ? AND user_id = ? ORDER BY created_at ASC',
+    [id, req.session.userId],
+    (err, rows) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows || []);
+    }
+  );
+});
+
+// Создать комментарий
+app.post('/api/todos/:id/comments', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { text } = req.body;
+  
+  if (!text || !text.trim()) {
+    res.status(400).json({ error: 'Текст комментария обязателен' });
+    return;
+  }
+  
+  // Проверяем, что задача принадлежит пользователю
+  db.get(
+    'SELECT id FROM todos WHERE id = ? AND user_id = ?',
+    [id, req.session.userId],
+    (err, todo) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (!todo) {
+        res.status(404).json({ error: 'Задача не найдена' });
+        return;
+      }
+      
+      db.run(
+        'INSERT INTO todo_comments (user_id, todo_id, text) VALUES (?, ?, ?)',
+        [req.session.userId, id, text.trim()],
+        function(insertErr) {
+          if (insertErr) {
+            res.status(500).json({ error: insertErr.message });
+            return;
+          }
+          db.get(
+            'SELECT id, text, created_at, updated_at FROM todo_comments WHERE id = ?',
+            [this.lastID],
+            (selectErr, comment) => {
+              if (selectErr) {
+                res.status(500).json({ error: selectErr.message });
+                return;
+              }
+              res.status(201).json(comment);
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Обновить комментарий
+app.put('/api/todos/:id/comments/:commentId', requireAuth, (req, res) => {
+  const { id, commentId } = req.params;
+  const { text } = req.body;
+  
+  if (!text || !text.trim()) {
+    res.status(400).json({ error: 'Текст комментария обязателен' });
+    return;
+  }
+  
+  // Проверяем, что комментарий принадлежит пользователю и связан с задачей
+  db.get(
+    'SELECT id FROM todo_comments WHERE id = ? AND todo_id = ? AND user_id = ?',
+    [commentId, id, req.session.userId],
+    (err, comment) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (!comment) {
+        res.status(404).json({ error: 'Комментарий не найден' });
+        return;
+      }
+      
+      db.run(
+        'UPDATE todo_comments SET text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND todo_id = ? AND user_id = ?',
+        [text.trim(), commentId, id, req.session.userId],
+        function(updateErr) {
+          if (updateErr) {
+            res.status(500).json({ error: updateErr.message });
+            return;
+          }
+          if (this.changes === 0) {
+            res.status(404).json({ error: 'Комментарий не найден' });
+            return;
+          }
+          db.get(
+            'SELECT id, text, created_at, updated_at FROM todo_comments WHERE id = ?',
+            [commentId],
+            (selectErr, updatedComment) => {
+              if (selectErr) {
+                res.status(500).json({ error: selectErr.message });
+                return;
+              }
+              res.json(updatedComment);
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
+// Удалить комментарий
+app.delete('/api/todos/:id/comments/:commentId', requireAuth, (req, res) => {
+  const { id, commentId } = req.params;
+  
+  db.run(
+    'DELETE FROM todo_comments WHERE id = ? AND todo_id = ? AND user_id = ?',
+    [commentId, id, req.session.userId],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Комментарий не найден' });
+        return;
+      }
+      res.json({ message: 'Комментарий удален' });
+    }
+  );
 });
 
 // Запуск сервера
