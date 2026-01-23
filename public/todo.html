@@ -91,14 +91,14 @@
       </div>
       <div class="time-edit-controls">
         <div class="time-edit-group">
-          <label for="timeInput">Добавить/вычесть время (HH:MM:SS):</label>
+          <label for="timeInput">Добавить/вычесть время (минуты):</label>
           <div class="time-input-group">
             <input 
               type="text" 
               id="timeInput" 
-              placeholder="00:30:00" 
+              placeholder="30" 
               class="time-input"
-              pattern="[0-9]{1,2}:[0-5][0-9]:[0-5][0-9]"
+              inputmode="numeric"
             >
             <button id="addTimeBtn" class="time-btn add-btn">+</button>
             <button id="subtractTimeBtn" class="time-btn subtract-btn">-</button>

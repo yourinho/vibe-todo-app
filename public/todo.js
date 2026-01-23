@@ -650,8 +650,22 @@ function setupTimeEditing() {
   }
 }
 
-function parseTimeToSeconds(timeStr) {
-  if (!timeStr || !timeStr.match(/^\d{1,2}:[0-5]\d:[0-5]\d$/)) {
+function parseTimeToSeconds(timeStr, isMinutes = false) {
+  if (!timeStr) {
+    return null;
+  }
+  
+  // Если это поле для добавления/вычитания (минуты), парсим просто число
+  if (isMinutes) {
+    const minutes = parseFloat(timeStr);
+    if (isNaN(minutes) || minutes < 0) {
+      return null;
+    }
+    return Math.floor(minutes * 60); // конвертируем минуты в секунды
+  }
+  
+  // Для поля установки времени - парсим формат HH:MM:SS
+  if (!timeStr.match(/^\d{1,2}:[0-5]\d:[0-5]\d$/)) {
     return null;
   }
   const parts = timeStr.split(':').map(Number);
@@ -680,11 +694,14 @@ function updateTimeDisplay() {
 async function updateTime(operation) {
   let inputElement = null;
   let seconds = 0;
+  let isMinutes = false;
 
   if (operation === 'set') {
     inputElement = setTimeInput;
+    isMinutes = false; // для установки времени используем формат HH:MM:SS
   } else {
     inputElement = timeInput;
+    isMinutes = true; // для добавления/вычитания используем минуты
   }
 
   if (!inputElement) {
@@ -698,9 +715,13 @@ async function updateTime(operation) {
     return;
   }
 
-  seconds = parseTimeToSeconds(timeStr);
+  seconds = parseTimeToSeconds(timeStr, isMinutes);
   if (seconds === null) {
-    showSnackbar('Неверный формат времени. Используйте HH:MM:SS', true);
+    if (isMinutes) {
+      showSnackbar('Введите число минут (например: 30 или 120)', true);
+    } else {
+      showSnackbar('Неверный формат времени. Используйте HH:MM:SS', true);
+    }
     return;
   }
 
